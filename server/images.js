@@ -4,11 +4,15 @@
 // dans .cache/img. Lecture seule : on ne fait que lire assets.panassor.ca.
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ASSETS = process.env.ASSETS_BASE_OVERRIDE || "https://assets.panassor.ca";
-const CACHE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".cache", "img");
+// En ligne (Vercel), seul le dossier temporaire est modifiable.
+const CACHE_DIR = process.env.VERCEL
+  ? path.join(os.tmpdir(), "atelier-img")
+  : path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".cache", "img");
 const WIDTHS = [160, 1000];
 const pending = new Map();
 
@@ -27,8 +31,7 @@ async function makeThumb(src, width, file) {
   const input = Buffer.from(await response.arrayBuffer());
   const sharp = await loadSharp();
   const output = await sharp(input).rotate().resize({ width, withoutEnlargement: true }).webp({ quality: 78 }).toBuffer();
-  await fs.mkdir(CACHE_DIR, { recursive: true });
-  await fs.writeFile(file, output);
+  await fs.mkdir(CACHE_DIR, { recursive: true }).then(() => fs.writeFile(file, output)).catch(() => {});
   return output;
 }
 

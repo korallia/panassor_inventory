@@ -10,7 +10,9 @@ dotenv.config({ path: path.join(root, ".env.atelier"), quiet: true });
 function required(name) {
   const value = process.env[name];
   if (!value) {
-    console.error(`[atelier] Variable manquante dans .env.atelier : ${name} (voir env.atelier.example)`);
+    const message = `[atelier] Variable manquante : ${name} (.env.atelier en local, variables d'environnement sur Vercel)`;
+    if (process.env.VERCEL) throw new Error(message);
+    console.error(message);
     process.exit(1);
   }
   return value;

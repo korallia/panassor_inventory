@@ -5,6 +5,8 @@ import { config } from "./config.js";
 
 const COOKIE = "atelier_session";
 const MAX_AGE_MS = 12 * 60 * 60 * 1000;
+// En ligne (https), le cookie ne voyage que chiffré.
+const SECURE = process.env.VERCEL ? "; Secure" : "";
 
 const sign = (value) => crypto.createHmac("sha256", config.sessionSecret).update(value).digest("hex");
 
@@ -20,11 +22,11 @@ export function checkPassword(password) {
 
 export function setSessionCookie(res) {
   const issued = String(Date.now());
-  res.setHeader("Set-Cookie", `${COOKIE}=${issued}.${sign(issued)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${MAX_AGE_MS / 1000}`);
+  res.setHeader("Set-Cookie", `${COOKIE}=${issued}.${sign(issued)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${MAX_AGE_MS / 1000}${SECURE}`);
 }
 
 export function clearSessionCookie(res) {
-  res.setHeader("Set-Cookie", `${COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`);
+  res.setHeader("Set-Cookie", `${COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${SECURE}`);
 }
 
 function readCookie(req) {
