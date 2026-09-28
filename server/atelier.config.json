@@ -1,0 +1,48 @@
+{
+  "_note": "Ce que la base du site ne décrit pas encore. Les produits sont repérés par leur slug_fr. Les ensembles passent à la base dès qu'ils ont leurs lignes dans kit_components.",
+  "ensembles": {
+    "crochet-et-tourne-serrure-voleur": {
+      "components": [
+        {
+          "slug": "crochet-voleur",
+          "qty": 1
+        },
+        {
+          "slug": "tourne-serrure-voleur",
+          "qty": 1
+        }
+      ],
+      "objective": 0
+    },
+    "cle-vierge-et-lime-voleur": {
+      "components": [
+        {
+          "slug": "cle-vierge-voleur",
+          "qty": 1
+        },
+        {
+          "slug": "lime-voleur",
+          "qty": 1
+        }
+      ],
+      "objective": 0
+    }
+  },
+  "paquets": {
+    "aiguilles-suture": {
+      "_note": "Square compte les paquets complets. orphelines = aiguilles seules en surplus.",
+      "types": [
+        {
+          "id": "droite",
+          "name": "Droites",
+          "orphelines": 0
+        },
+        {
+          "id": "courbe",
+          "name": "Courbes",
+          "orphelines": 0
+        }
+      ]
+    }
+  }
+}

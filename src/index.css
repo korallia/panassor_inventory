@@ -1,0 +1,143 @@
+@import "tailwindcss";
+
+/* Palette Panassor (mêmes valeurs que la maquette du canevas). */
+@theme {
+  --color-ink: #080504;
+  --color-panel: #0d0805;
+  --color-panel2: #120c07;
+  --color-track: #1d140b;
+  --color-line: #6f5423;
+  --color-gold: #c89b3c;
+  --color-gold-light: #e7c97b;
+  --color-parch: #f3e7cf;
+  --color-cream: #fff1d2;
+  --color-muted: #d7c8ad;
+  --color-muted2: #b9a888;
+  --color-faint: #8f7a58;
+  --color-alert: #e8876f;
+  --color-alert-line: #9b4a36;
+  --color-alert-soft: #ffd9cf;
+  --color-alert-muted: #d7b5a8;
+  --color-alert-bg: #1a0d08;
+  --color-warn: #f0c98a;
+  --color-ok: #9fc7a4;
+  --color-ok-line: #3f6b48;
+  --color-btn: #1f3324;
+  --color-btn-line: #b8964a;
+  --color-btn-text: #e4c36a;
+
+  --font-serif: "EB Garamond", Georgia, serif;
+  --font-sc: "IM Fell English SC", Georgia, serif;
+}
+
+html,
+body {
+  background: var(--color-ink);
+  color: var(--color-parch);
+  font-family: var(--font-serif);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+a {
+  color: var(--color-gold-light);
+}
+a:hover {
+  color: var(--color-cream);
+}
+
+@layer components {
+  /* Titres « petites capitales » Panassor */
+  .sc {
+    font-family: var(--font-sc);
+    text-transform: uppercase;
+    font-weight: 400;
+  }
+  .eyebrow {
+    font-family: var(--font-sc);
+    text-transform: uppercase;
+    font-size: 13px;
+    letter-spacing: 0.3em;
+    color: var(--color-gold);
+  }
+  .lbl {
+    font-family: var(--font-sc);
+    text-transform: uppercase;
+    font-size: 12px;
+    letter-spacing: 0.2em;
+    color: var(--color-gold);
+  }
+  .th {
+    font-family: var(--font-sc);
+    text-transform: uppercase;
+    font-size: 13px;
+    letter-spacing: 0.16em;
+    color: var(--color-gold);
+    text-align: left;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--color-line);
+    font-weight: 400;
+    white-space: nowrap;
+  }
+  .td {
+    padding: 12px 16px;
+    border-bottom: 1px solid rgb(111 84 35 / 0.35);
+    font-size: 18px;
+  }
+  .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .field {
+    width: 100%;
+    box-sizing: border-box;
+    height: 44px;
+    background: var(--color-ink);
+    border: 1px solid var(--color-line);
+    color: var(--color-parch);
+    padding: 0 12px;
+    font-family: var(--font-serif);
+    font-size: 17px;
+  }
+  .field:focus {
+    outline: 1px solid var(--color-gold);
+  }
+  .btn-primary {
+    height: 48px;
+    padding: 0 22px;
+    border: 1px solid var(--color-btn-line);
+    background: var(--color-btn);
+    color: var(--color-btn-text);
+    font-family: var(--font-sc);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-size: 15px;
+    cursor: pointer;
+  }
+  .btn-primary:hover {
+    background: #28422f;
+  }
+  .btn-primary:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .btn-ghost {
+    height: 44px;
+    padding: 0 18px;
+    border: 1px solid var(--color-line);
+    background: transparent;
+    color: var(--color-gold-light);
+    font-family: var(--font-sc);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .btn-ghost:hover {
+    border-color: var(--color-gold);
+    color: var(--color-cream);
+  }
+}
