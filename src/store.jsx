@@ -208,17 +208,35 @@ export function InventoryProvider({ children }) {
     reload();
   }, [reload]);
 
-  const login = useCallback(
-    async (password) => {
-      const response = await fetch("/api/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
-      });
-      if (!response.ok) return false;
+  // Connexion en deux temps : le courriel reçoit un code, puis on le vérifie.
+  const requestCode = useCallback(async (email, password) => {
+    const response = await fetch("/api/login/code", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) return { ok: false, error: body.error || "Envoi impossible." };
+    // Appareil reconnu : la session est déjà ouverte, pas de code.
+    if (body.trusted) {
       setStatus("chargement");
       await reload();
-      return true;
+    }
+    return { ok: true, trusted: Boolean(body.trusted) };
+  }, [reload]);
+
+  const verifyCode = useCallback(
+    async (code, remember) => {
+      const response = await fetch("/api/login/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, remember }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) return { ok: false, error: body.error || "Code invalide." };
+      setStatus("chargement");
+      await reload();
+      return { ok: true };
     },
     [reload]
   );
@@ -226,8 +244,8 @@ export function InventoryProvider({ children }) {
   // Recalcule l'inventaire seulement quand les produits ou les kits changent (pas à chaque frappe dans le catalogue).
   const computed = useMemo(() => computeInventory({ products: state.products, kits: state.kits }), [state.products, state.kits]);
   const value = useMemo(
-    () => ({ ...state, ...computed, dispatch, status, error, login, reload, readOnly: state.source === "live" }),
-    [state, computed, status, error, login, reload]
+    () => ({ ...state, ...computed, dispatch, status, error, requestCode, verifyCode, reload, readOnly: state.source === "live" }),
+    [state, computed, status, error, requestCode, verifyCode, reload]
   );
   return <InventoryContext.Provider value={value}>{children}</InventoryContext.Provider>;
 }

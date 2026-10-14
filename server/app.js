@@ -6,19 +6,26 @@
 // Utilisée en local par server/index.js et en ligne par api/index.js (Vercel).
 import express from "express";
 
-import { checkPassword, requireAuth, setSessionCookie, clearSessionCookie } from "./auth.js";
+import { requireAuth, requestCode, verifyCode, clearSessionCookie } from "./auth.js";
 import { loadAtelierData } from "./data.js";
 import { imageRoute } from "./images.js";
-import { diagRoute } from "./diag.js";
 
 const app = express();
 app.use(express.json());
 
-app.post("/api/login", (req, res) => {
-  if (!checkPassword(req.body?.password)) return res.status(401).json({ error: "Mot de passe invalide" });
-  setSessionCookie(res);
-  res.json({ ok: true });
-});
+// Connexion par courriel + code (voir auth.js). Une panne (base, Resend…)
+// est écrite dans les journaux Vercel et renvoie un message clair.
+const safe = (handler) => async (req, res) => {
+  try {
+    await handler(req, res);
+  } catch (error) {
+    console.error(`[atelier] ${req.path} :`, error.message);
+    if (!res.headersSent) res.status(500).json({ error: `Erreur du serveur : ${error.message}` });
+  }
+};
+
+app.post("/api/login/code", safe(requestCode));
+app.post("/api/login/verify", safe(verifyCode));
 
 app.post("/api/logout", (req, res) => {
   clearSessionCookie(res);
@@ -27,7 +34,7 @@ app.post("/api/logout", (req, res) => {
 
 app.get("/api/data", requireAuth, async (req, res) => {
   try {
-    res.json(await loadAtelierData());
+    res.json({ ...(await loadAtelierData()), user: req.atelierUser });
   } catch (error) {
     console.error("[atelier] lecture impossible :", error.message);
     res.status(502).json({ error: "Lecture impossible", detail: error.message });
@@ -35,6 +42,5 @@ app.get("/api/data", requireAuth, async (req, res) => {
 });
 
 app.get("/api/img", requireAuth, imageRoute);
-app.get("/api/diag", requireAuth, diagRoute);
 
 export default app;
