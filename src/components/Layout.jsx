@@ -166,8 +166,10 @@ export default function Layout() {
         </div>
         <div className="sc text-[11px] tracking-[.24em] text-gold">Atelier · inventaire</div>
         {/* Courriel sur 2 lignes (le nom, puis @domaine) pour ne pas être coupé. */}
+        {/* Ligne d'or au-dessus du courriel (la même qu'en dessous). */}
+        {user && <div className="mt-4 h-px w-full bg-gold/50 lg:mt-5" />}
         {user && (
-          <div className="mt-2 font-sc text-[15px] leading-snug text-cream [overflow-wrap:anywhere]">
+          <div className="mt-4 font-sc text-[15px] leading-snug text-cream [overflow-wrap:anywhere] lg:mt-5">
             {user.split("@")[0]}
             <br />@{user.split("@")[1]}
           </div>
