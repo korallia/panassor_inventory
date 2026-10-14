@@ -9,11 +9,11 @@ const pool = new pg.Pool({ connectionString: config.databaseUrl, ssl: config.dat
 
 // Garde-fou : chaque requête tourne dans une transaction READ ONLY.
 // Même par erreur, un INSERT/UPDATE/DELETE serait refusé par Postgres.
-async function readOnly(sql) {
+export async function readOnly(sql, params = []) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN READ ONLY");
-    const result = await client.query(sql);
+    const result = await client.query(sql, params);
     await client.query("COMMIT");
     return result;
   } catch (error) {

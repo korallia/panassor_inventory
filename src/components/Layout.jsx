@@ -18,27 +18,94 @@ function linkClass({ isActive }) {
     : `${base} border-transparent text-muted! hover:text-cream!`;
 }
 
+// Connexion en 2 étapes : courriel + mot de passe, puis code reçu par courriel.
 function Login() {
-  const { login } = useInventory();
+  const { requestCode, verifyCode } = useInventory();
+  const [step, setStep] = useState("email");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [failed, setFailed] = useState(false);
-  async function submit(event) {
+  const [code, setCode] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submitEmail(event) {
     event.preventDefault();
-    setFailed(!(await login(password)));
+    setBusy(true);
+    const result = await requestCode(email, password);
+    setBusy(false);
+    if (!result.ok) return setMessage(result.error);
+    setMessage("");
+    setCode("");
+    setPassword("");
+    setStep("code");
   }
+
+  async function submitCode(event) {
+    event.preventDefault();
+    setBusy(true);
+    const result = await verifyCode(code);
+    setBusy(false);
+    if (!result.ok) setMessage(result.error);
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
-      <form onSubmit={submit} className="flex w-full max-w-[380px] flex-col gap-4 border border-gold/70 bg-panel px-7 py-8">
+      <form
+        onSubmit={step === "email" ? submitEmail : submitCode}
+        className="flex w-full max-w-[380px] flex-col gap-4 border border-gold/70 bg-panel px-7 py-8"
+      >
         <div className="font-sc text-[30px] text-cream">Panassor</div>
         <div className="sc -mt-3 text-[12px] tracking-[.24em] text-gold">Atelier · inventaire</div>
-        <label className="flex flex-col gap-1.5">
-          <span className="lbl">Mot de passe</span>
-          <input className="field" type="password" autoFocus value={password} onChange={(e) => setPassword(e.target.value)} />
-        </label>
-        {failed && <div className="text-[15px] text-alert">Mot de passe invalide.</div>}
-        <button type="submit" className="btn-primary">
-          Entrer
+
+        {step === "email" ? (
+          <>
+            <label className="flex flex-col gap-1.5">
+              <span className="lbl">Courriel</span>
+              <input className="field" type="email" autoComplete="email" autoFocus required value={email} onChange={(e) => setEmail(e.target.value)} />
+            </label>
+            <label className="flex flex-col gap-1.5">
+              <span className="lbl">Mot de passe</span>
+              <input className="field" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+            </label>
+          </>
+        ) : (
+          <>
+            <div className="text-[15px] leading-snug text-muted">
+              Un code vient d'être envoyé à <span className="text-cream">{email}</span>.
+            </div>
+            <label className="flex flex-col gap-1.5">
+              <span className="lbl">Code à 6 chiffres</span>
+              <input
+                className="field tracking-[.3em]"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                autoFocus
+                maxLength={6}
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+              />
+            </label>
+          </>
+        )}
+
+        {message && <div className="text-[15px] text-alert">{message}</div>}
+
+        <button type="submit" className="btn-primary" disabled={busy}>
+          {step === "email" ? "Recevoir un code" : "Entrer"}
         </button>
+
+        {step === "code" && (
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => {
+              setStep("email");
+              setMessage("");
+            }}
+          >
+            Recommencer
+          </button>
+        )}
       </form>
     </div>
   );

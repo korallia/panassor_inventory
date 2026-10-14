@@ -6,19 +6,16 @@
 // Utilisée en local par server/index.js et en ligne par api/index.js (Vercel).
 import express from "express";
 
-import { checkPassword, requireAuth, setSessionCookie, clearSessionCookie } from "./auth.js";
+import { requireAuth, requestCode, verifyCode, clearSessionCookie } from "./auth.js";
 import { loadAtelierData } from "./data.js";
 import { imageRoute } from "./images.js";
-import { diagRoute } from "./diag.js";
 
 const app = express();
 app.use(express.json());
 
-app.post("/api/login", (req, res) => {
-  if (!checkPassword(req.body?.password)) return res.status(401).json({ error: "Mot de passe invalide" });
-  setSessionCookie(res);
-  res.json({ ok: true });
-});
+// Connexion par courriel + code (voir auth.js).
+app.post("/api/login/code", requestCode);
+app.post("/api/login/verify", verifyCode);
 
 app.post("/api/logout", (req, res) => {
   clearSessionCookie(res);
@@ -27,7 +24,7 @@ app.post("/api/logout", (req, res) => {
 
 app.get("/api/data", requireAuth, async (req, res) => {
   try {
-    res.json(await loadAtelierData());
+    res.json({ ...(await loadAtelierData()), user: req.atelierUser });
   } catch (error) {
     console.error("[atelier] lecture impossible :", error.message);
     res.status(502).json({ error: "Lecture impossible", detail: error.message });
@@ -35,6 +32,5 @@ app.get("/api/data", requireAuth, async (req, res) => {
 });
 
 app.get("/api/img", requireAuth, imageRoute);
-app.get("/api/diag", requireAuth, diagRoute);
 
 export default app;
