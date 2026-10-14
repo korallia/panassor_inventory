@@ -6,7 +6,16 @@
 // Utilisée en local par server/index.js et en ligne par api/index.js (Vercel).
 import express from "express";
 
-import { requireAuth, requestCode, verifyCode, clearSessionCookie } from "./auth.js";
+import {
+  requireAuth,
+  requestCode,
+  verifyCode,
+  clearSessionCookie,
+  accountInfo,
+  changePassword,
+  requestEmailChange,
+  confirmEmailChange,
+} from "./auth.js";
 import { loadAtelierData } from "./data.js";
 import { imageRoute } from "./images.js";
 
@@ -26,6 +35,12 @@ const safe = (handler) => async (req, res) => {
 
 app.post("/api/login/code", safe(requestCode));
 app.post("/api/login/verify", safe(verifyCode));
+
+// Paramètres du compte (connecté seulement).
+app.get("/api/compte", requireAuth, accountInfo);
+app.post("/api/compte/mot-de-passe", requireAuth, safe(changePassword));
+app.post("/api/compte/courriel", requireAuth, safe(requestEmailChange));
+app.post("/api/compte/courriel/confirmer", requireAuth, safe(confirmEmailChange));
 
 app.post("/api/logout", (req, res) => {
   clearSessionCookie(res);

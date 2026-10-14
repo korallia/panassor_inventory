@@ -13,11 +13,12 @@ import crypto from "node:crypto";
 
 import { config } from "./config.js";
 import { sendCodeEmail } from "./email.js";
-import { readOnly } from "./data.js";
-import { verifyPassword, DUMMY_HASH } from "./passwords.js";
+import { readOnly, writeAccount } from "./data.js";
+import { verifyPassword, hashPassword, DUMMY_HASH } from "./passwords.js";
 
 const SESSION_COOKIE = "atelier_session";
 const CODE_COOKIE = "atelier_code";
+const EMAIL_CODE_COOKIE = "atelier_code_courriel";
 const DEVICE_COOKIE = "atelier_appareil";
 const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const DEVICE_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
@@ -137,13 +138,13 @@ export async function requestCode(req, res) {
   res.json({ ok: true });
 }
 
-function writeChallenge(res, challenge) {
+function writeChallenge(res, challenge, cookieName = CODE_COOKIE) {
   const payload = b64(JSON.stringify(challenge));
-  setCookie(res, CODE_COOKIE, `${payload}.${hmac(payload)}`, CODE_MAX_AGE_MS);
+  setCookie(res, cookieName, `${payload}.${hmac(payload)}`, CODE_MAX_AGE_MS);
 }
 
-function readChallenge(req) {
-  const value = readCookie(req, CODE_COOKIE);
+function readChallenge(req, cookieName = CODE_COOKIE) {
+  const value = readCookie(req, cookieName);
   if (!value) return null;
   const [payload, signature] = value.split(".");
   if (!payload || !signature || !safeEqual(signature, hmac(payload))) return null;
@@ -209,6 +210,89 @@ function setSession(res, email) {
 
 export function clearSessionCookie(res) {
   setCookie(res, SESSION_COOKIE, "", 0);
+}
+
+// --- Paramètres du compte --------------------------------------------------
+// Toutes ces routes passent par requireAuth : req.atelierUser = le courriel.
+
+function forgetUsersCache() {
+  usersCache = { at: 0, byEmail: new Map() };
+}
+
+export function accountInfo(req, res) {
+  res.json({ email: req.atelierUser });
+}
+
+export async function changePassword(req, res) {
+  const { current, next } = req.body || {};
+
+  if (!(await checkCredentials(req.atelierUser, current))) {
+    return res.status(401).json({ error: "Mot de passe actuel invalide." });
+  }
+  if (typeof next !== "string" || next.length < 12) {
+    return res.status(400).json({ error: "Le nouveau mot de passe doit faire 12 caractères minimum." });
+  }
+
+  await writeAccount(`UPDATE atelier_users SET password_hash = $1 WHERE email = $2`, [
+    hashPassword(next),
+    req.atelierUser,
+  ]);
+  forgetUsersCache();
+  res.json({ ok: true });
+}
+
+// Changer de courriel : mot de passe actuel, puis un code envoyé à la
+// NOUVELLE adresse (on vérifie qu'elle existe et qu'elle t'appartient).
+export async function requestEmailChange(req, res) {
+  const newEmail = normalizeEmail(req.body?.newEmail);
+
+  if (!(await checkCredentials(req.atelierUser, req.body?.password))) {
+    return res.status(401).json({ error: "Mot de passe invalide." });
+  }
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(newEmail)) {
+    return res.status(400).json({ error: "Courriel invalide." });
+  }
+  if (newEmail === req.atelierUser) {
+    return res.status(400).json({ error: "C'est déjà ton courriel." });
+  }
+  if (await isAllowedEmail(newEmail)) {
+    return res.status(409).json({ error: "Ce courriel est déjà utilisé." });
+  }
+
+  const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
+  const expires = Date.now() + CODE_MAX_AGE_MS;
+  writeChallenge(
+    res,
+    { email: newEmail, oldEmail: req.atelierUser, expires, tries: 0, codeMac: hmac(`${newEmail}|${expires}|${code}`) },
+    EMAIL_CODE_COOKIE
+  );
+  await sendCodeEmail(newEmail, code);
+  res.json({ ok: true });
+}
+
+export async function confirmEmailChange(req, res) {
+  const challenge = readChallenge(req, EMAIL_CODE_COOKIE);
+  const code = String(req.body?.code || "").replace(/\s+/g, "");
+
+  if (!challenge || challenge.oldEmail !== req.atelierUser || Date.now() > challenge.expires) {
+    return res.status(401).json({ error: "Code expiré. Recommence." });
+  }
+  if (challenge.tries >= CODE_MAX_TRIES) {
+    return res.status(401).json({ error: "Trop d'essais. Recommence." });
+  }
+  if (!safeEqual(hmac(`${challenge.email}|${challenge.expires}|${code}`), challenge.codeMac)) {
+    writeChallenge(res, { ...challenge, tries: challenge.tries + 1 }, EMAIL_CODE_COOKIE);
+    return res.status(401).json({ error: "Code invalide." });
+  }
+
+  await writeAccount(`UPDATE atelier_users SET email = $1 WHERE email = $2`, [challenge.email, req.atelierUser]);
+  forgetUsersCache();
+
+  setCookie(res, EMAIL_CODE_COOKIE, "", 0);
+  // La session (et l'appareil reconnu) suivent la nouvelle adresse.
+  setSession(res, challenge.email);
+  if (isTrustedDevice(req, req.atelierUser)) rememberDevice(res, challenge.email);
+  res.json({ ok: true, email: challenge.email });
 }
 
 export async function requireAuth(req, res, next) {
