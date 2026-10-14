@@ -118,6 +118,34 @@ function Login() {
   );
 }
 
+// Petite flèche circulaire à côté du titre : recharge la page, comme F5.
+function ReloadButton() {
+  return (
+    <button
+      type="button"
+      onClick={() => window.location.reload()}
+      title="Recharger la page"
+      aria-label="Recharger la page"
+      className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center text-gold transition hover:text-cream"
+    >
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M20 12a8 8 0 1 1-2.34-5.66" />
+        <path d="M20 4v5h-5" />
+      </svg>
+    </button>
+  );
+}
+
 export default function Layout() {
   const { dispatch, status, source, reload, user, logout } = useInventory();
   if (status === "chargement") {
@@ -131,7 +159,10 @@ export default function Layout() {
         aria-label="Sections"
         className="flex flex-col gap-1.5 border-b border-line bg-panel px-4 py-5 lg:sticky lg:top-0 lg:h-screen lg:w-60 lg:shrink-0 lg:border-b-0 lg:border-r lg:px-6 lg:py-8"
       >
-        <div className="font-sc text-[28px] text-cream">Panassor</div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="font-sc text-[28px] text-cream">Panassor</div>
+          <ReloadButton />
+        </div>
         <div className="sc text-[11px] tracking-[.24em] text-gold">Atelier · inventaire</div>
         {/* Courriel sur 2 lignes (le nom, puis @domaine) pour ne pas être coupé. */}
         {user && (
@@ -149,13 +180,12 @@ export default function Layout() {
             </NavLink>
           ))}
         </div>
+        {/* Petite ligne d'or à la fin du menu. */}
+        <div className="mt-3 h-px w-full bg-gold/50 lg:mt-6" />
         <div className="mt-auto hidden pt-8 lg:block">
           {source === "live" ? (
             <>
               <div className="text-[14px] leading-snug text-faint">Vraies données, lecture seule. Le stock se change dans Square.</div>
-              <button type="button" className="btn-ghost mt-3 w-full" onClick={reload}>
-                Relire les données
-              </button>
               <button type="button" className="btn-ghost mt-3 w-full" onClick={logout}>
                 Se déconnecter
               </button>
