@@ -132,8 +132,10 @@ export default function Layout() {
         className="flex flex-col gap-1.5 border-b border-line bg-panel px-4 py-5 lg:sticky lg:top-0 lg:h-screen lg:w-60 lg:shrink-0 lg:border-b-0 lg:border-r lg:px-6 lg:py-8"
       >
         <div className="font-sc text-[28px] text-cream">Panassor</div>
-        <div className={`sc text-[11px] tracking-[.24em] text-gold ${user ? "" : "mb-3 lg:mb-7"}`}>Atelier · inventaire</div>
-        {user && <div className="mb-3 mt-1 truncate text-[13px] text-faint lg:mb-7">{user}</div>}
+        <div className="sc text-[11px] tracking-[.24em] text-gold">Atelier · inventaire</div>
+        {user && <div className="mt-2 truncate font-sc text-[15px] text-cream">{user}</div>}
+        {/* Petite ligne d'or entre le titre et le menu. */}
+        <div className="mb-3 mt-4 h-px w-full bg-gold/50 lg:mb-6 lg:mt-5" />
         <div className="-mx-1 flex gap-1 overflow-x-auto lg:mx-0 lg:flex-col lg:overflow-visible">
           {sections.map((section) => (
             <NavLink key={section.to} to={section.to} className={linkClass}>
