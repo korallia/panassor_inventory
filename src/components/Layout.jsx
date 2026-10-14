@@ -9,6 +9,7 @@ const sections = [
   { to: "/minimums", label: "Minimums" },
   { to: "/alertes", label: "Alertes et rapports" },
   { to: "/catalogue", label: "Catalogue" },
+  { to: "/parametres", label: "Paramètres" },
 ];
 
 function linkClass({ isActive }) {
@@ -131,7 +132,8 @@ export default function Layout() {
         className="flex flex-col gap-1.5 border-b border-line bg-panel px-4 py-5 lg:sticky lg:top-0 lg:h-screen lg:w-60 lg:shrink-0 lg:border-b-0 lg:border-r lg:px-6 lg:py-8"
       >
         <div className="font-sc text-[28px] text-cream">Panassor</div>
-        <div className="sc mb-3 text-[11px] tracking-[.24em] text-gold lg:mb-7">Atelier · inventaire</div>
+        <div className={`sc text-[11px] tracking-[.24em] text-gold ${user ? "" : "mb-3 lg:mb-7"}`}>Atelier · inventaire</div>
+        {user && <div className="mb-3 mt-1 truncate text-[13px] text-faint lg:mb-7">{user}</div>}
         <div className="-mx-1 flex gap-1 overflow-x-auto lg:mx-0 lg:flex-col lg:overflow-visible">
           {sections.map((section) => (
             <NavLink key={section.to} to={section.to} className={linkClass}>
@@ -139,27 +141,15 @@ export default function Layout() {
             </NavLink>
           ))}
         </div>
-        {source === "live" && (
-          <div className="-mx-1 flex gap-1 lg:mx-0 lg:mt-6 lg:flex-col">
-            <NavLink to="/parametres" className={linkClass}>
-              Paramètres
-            </NavLink>
-            <button
-              type="button"
-              onClick={logout}
-              className="block border border-transparent px-3.5 py-3 text-left text-[19px] whitespace-nowrap text-muted hover:text-cream"
-            >
-              Se déconnecter
-            </button>
-          </div>
-        )}
-        {user && <div className="hidden truncate pt-2 text-[13px] text-faint lg:block">{user}</div>}
         <div className="mt-auto hidden pt-8 lg:block">
           {source === "live" ? (
             <>
               <div className="text-[14px] leading-snug text-faint">Vraies données, lecture seule. Le stock se change dans Square.</div>
               <button type="button" className="btn-ghost mt-3 w-full" onClick={reload}>
                 Relire les données
+              </button>
+              <button type="button" className="btn-ghost mt-3 w-full" onClick={logout}>
+                Se déconnecter
               </button>
             </>
           ) : (
