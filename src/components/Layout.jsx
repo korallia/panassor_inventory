@@ -190,7 +190,7 @@ export default function Layout() {
           {source === "live" ? (
             <>
               <div className="text-[14px] leading-snug text-faint">Vraies données, lecture seule. Le stock se change dans Square.</div>
-              <button type="button" className="btn-ghost mt-3 w-full" onClick={logout}>
+              <button type="button" className="btn-ghost mt-3 w-full px-2! text-[13px]! whitespace-nowrap" onClick={logout}>
                 Se déconnecter
               </button>
             </>
