@@ -176,7 +176,8 @@ export default function Layout() {
         )}
         {/* Petite ligne d'or entre le titre et le menu. */}
         <div className="mb-3 mt-4 h-px w-full bg-gold/50 lg:mb-6 lg:mt-5" />
-        <div className="-mx-1 flex gap-1 overflow-x-auto lg:mx-0 lg:flex-col lg:overflow-visible">
+        {/* Sur ordi, l'espace entre les sections grandit avec la hauteur de l'écran (sans exagérer). */}
+        <div className="-mx-1 flex gap-1 overflow-x-auto lg:mx-0 lg:flex-col lg:gap-[clamp(4px,2.6vh,30px)] lg:overflow-visible">
           {sections.map((section) => (
             <NavLink key={section.to} to={section.to} className={linkClass}>
               {section.label}
