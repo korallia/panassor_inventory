@@ -186,15 +186,18 @@ export default function Layout() {
         </div>
         {/* Petite ligne d'or à la fin du menu. */}
         <div className="mt-3 h-px w-full bg-gold/50 lg:mt-6" />
+        {/* Déconnexion juste sous le menu, toujours visible. */}
+        {source === "live" && (
+          <button
+            type="button"
+            className="btn-ghost mt-4 hidden w-full px-2! text-[13px]! whitespace-nowrap lg:block lg:mt-6"
+            onClick={logout}
+          >
+            Se déconnecter
+          </button>
+        )}
         <div className="mt-auto hidden pt-8 lg:block">
-          {source === "live" ? (
-            <>
-              <div className="text-[14px] leading-snug text-faint">Vraies données, lecture seule. Le stock se change dans Square.</div>
-              <button type="button" className="btn-ghost mt-3 w-full px-2! text-[13px]! whitespace-nowrap" onClick={logout}>
-                Se déconnecter
-              </button>
-            </>
-          ) : (
+          {source === "live" ? null : (
             <>
               <div className="text-[14px] leading-snug text-faint">
                 Données d'exemple. Les changements restent dans cette page et disparaissent au rechargement.
