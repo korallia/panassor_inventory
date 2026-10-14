@@ -7,6 +7,7 @@ import Kits from "./pages/Kits.jsx";
 import Minimums from "./pages/Minimums.jsx";
 import Alertes from "./pages/Alertes.jsx";
 import Catalogue from "./pages/Catalogue.jsx";
+import Parametres from "./pages/Parametres.jsx";
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
         <Route path="/objectifs/*" element={<Navigate to="/minimums" replace />} />
         <Route path="/alertes" element={<Alertes />} />
         <Route path="/catalogue" element={<Catalogue />} />
+        <Route path="/parametres" element={<Parametres />} />
         <Route path="*" element={<Navigate to="/inventaire" replace />} />
       </Route>
     </Routes>

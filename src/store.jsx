@@ -172,6 +172,7 @@ function reducer(state, action) {
         source: "live",
         environment: action.data.environment,
         loadedAt: action.data.loadedAt,
+        user: action.data.user || null,
       };
     default:
       return state;
@@ -241,11 +242,16 @@ export function InventoryProvider({ children }) {
     [reload]
   );
 
+  const logout = useCallback(async () => {
+    await fetch("/api/logout", { method: "POST" }).catch(() => {});
+    setStatus("connexion");
+  }, []);
+
   // Recalcule l'inventaire seulement quand les produits ou les kits changent (pas à chaque frappe dans le catalogue).
   const computed = useMemo(() => computeInventory({ products: state.products, kits: state.kits }), [state.products, state.kits]);
   const value = useMemo(
-    () => ({ ...state, ...computed, dispatch, status, error, requestCode, verifyCode, reload, readOnly: state.source === "live" }),
-    [state, computed, status, error, requestCode, verifyCode, reload]
+    () => ({ ...state, ...computed, dispatch, status, error, requestCode, verifyCode, logout, reload, readOnly: state.source === "live" }),
+    [state, computed, status, error, requestCode, verifyCode, logout, reload]
   );
   return <InventoryContext.Provider value={value}>{children}</InventoryContext.Provider>;
 }

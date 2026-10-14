@@ -118,7 +118,7 @@ function Login() {
 }
 
 export default function Layout() {
-  const { dispatch, status, source, reload } = useInventory();
+  const { dispatch, status, source, reload, user, logout } = useInventory();
   if (status === "chargement") {
     return <div className="flex min-h-screen items-center justify-center text-[18px] text-muted2">Lecture des données…</div>;
   }
@@ -139,6 +139,21 @@ export default function Layout() {
             </NavLink>
           ))}
         </div>
+        {source === "live" && (
+          <div className="-mx-1 flex gap-1 lg:mx-0 lg:mt-6 lg:flex-col">
+            <NavLink to="/parametres" className={linkClass}>
+              Paramètres
+            </NavLink>
+            <button
+              type="button"
+              onClick={logout}
+              className="block border border-transparent px-3.5 py-3 text-left text-[19px] whitespace-nowrap text-muted hover:text-cream"
+            >
+              Se déconnecter
+            </button>
+          </div>
+        )}
+        {user && <div className="hidden truncate pt-2 text-[13px] text-faint lg:block">{user}</div>}
         <div className="mt-auto hidden pt-8 lg:block">
           {source === "live" ? (
             <>

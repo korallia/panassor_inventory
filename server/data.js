@@ -9,6 +9,13 @@ const pool = new pg.Pool({ connectionString: config.databaseUrl, ssl: config.dat
 
 // Garde-fou : chaque requête tourne dans une transaction READ ONLY.
 // Même par erreur, un INSERT/UPDATE/DELETE serait refusé par Postgres.
+// Seule écriture permise à l'atelier pour l'instant : son propre compte
+// (courriel, mot de passe). L'utilisateur Postgres atelier_app n'a de toute
+// façon le droit de modifier que ces deux colonnes.
+export async function writeAccount(sql, params = []) {
+  return pool.query(sql, params);
+}
+
 export async function readOnly(sql, params = []) {
   const client = await pool.connect();
   try {
