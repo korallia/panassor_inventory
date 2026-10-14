@@ -133,7 +133,13 @@ export default function Layout() {
       >
         <div className="font-sc text-[28px] text-cream">Panassor</div>
         <div className="sc text-[11px] tracking-[.24em] text-gold">Atelier · inventaire</div>
-        {user && <div className="mt-2 truncate font-sc text-[15px] text-cream">{user}</div>}
+        {/* Courriel sur 2 lignes (le nom, puis @domaine) pour ne pas être coupé. */}
+        {user && (
+          <div className="mt-2 font-sc text-[15px] leading-snug text-cream [overflow-wrap:anywhere]">
+            {user.split("@")[0]}
+            <br />@{user.split("@")[1]}
+          </div>
+        )}
         {/* Petite ligne d'or entre le titre et le menu. */}
         <div className="mb-3 mt-4 h-px w-full bg-gold/50 lg:mb-6 lg:mt-5" />
         <div className="-mx-1 flex gap-1 overflow-x-auto lg:mx-0 lg:flex-col lg:overflow-visible">
