@@ -1,7 +1,10 @@
 // Connexion en deux étapes :
 //   1. courriel + mot de passe d'un utilisateur actif de la table atelier_users
 //   2. code à 6 chiffres envoyé à ce courriel (valide 10 minutes)
-// Le bon code ouvre une session de 12 h, au nom de cette personne.
+// Le bon code ouvre une session de 7 jours, au nom de cette personne.
+// « Se souvenir de cet appareil » : pendant 90 jours, cet appareil n'a plus
+// besoin du code (le mot de passe reste demandé). Un nouvel appareil passe
+// toujours par les deux étapes.
 //
 // Rien n'est gardé en mémoire entre deux requêtes (Vercel peut répondre
 // avec un serveur différent à chaque fois) : le code attendu voyage dans
@@ -15,7 +18,9 @@ import { verifyPassword, DUMMY_HASH } from "./passwords.js";
 
 const SESSION_COOKIE = "atelier_session";
 const CODE_COOKIE = "atelier_code";
-const SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+const DEVICE_COOKIE = "atelier_appareil";
+const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const DEVICE_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
 const CODE_MAX_AGE_MS = 10 * 60 * 1000;
 const CODE_MAX_TRIES = 5;
 // En ligne (https), les cookies ne voyagent que chiffrés.
@@ -105,6 +110,12 @@ export async function requestCode(req, res) {
   }
   loginFailures.delete(ip);
 
+  // Appareil déjà reconnu pour ce courriel : pas besoin du code.
+  if (isTrustedDevice(req, email)) {
+    setSession(res, email);
+    return res.json({ ok: true, trusted: true });
+  }
+
   const entry = codeSends.get(email);
   const recent = entry && now - entry.first < CODE_WINDOW_MS ? entry : null;
   if (recent && recent.count >= CODE_MAX_SENDS) {
@@ -164,7 +175,29 @@ export async function verifyCode(req, res) {
 
   setCookie(res, CODE_COOKIE, "", 0);
   setSession(res, challenge.email);
+  if (req.body?.remember) rememberDevice(res, challenge.email);
   res.json({ ok: true, email: challenge.email });
+}
+
+// --- Appareil reconnu -----------------------------------------------------
+
+function rememberDevice(res, email) {
+  const value = `${Date.now() + DEVICE_MAX_AGE_MS}.${b64(email)}`;
+  setCookie(res, DEVICE_COOKIE, `${value}.${hmac(`appareil.${value}`)}`, DEVICE_MAX_AGE_MS);
+}
+
+function isTrustedDevice(req, email) {
+  const value = readCookie(req, DEVICE_COOKIE);
+  if (!value) return false;
+  const [expires, email64, signature] = value.split(".");
+  return Boolean(
+    expires &&
+      email64 &&
+      signature &&
+      safeEqual(signature, hmac(`appareil.${expires}.${email64}`)) &&
+      Date.now() < Number(expires) &&
+      unb64(email64) === email
+  );
 }
 
 // --- Session --------------------------------------------------------------

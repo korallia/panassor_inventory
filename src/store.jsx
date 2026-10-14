@@ -216,15 +216,21 @@ export function InventoryProvider({ children }) {
       body: JSON.stringify({ email, password }),
     });
     const body = await response.json().catch(() => ({}));
-    return response.ok ? { ok: true } : { ok: false, error: body.error || "Envoi impossible." };
-  }, []);
+    if (!response.ok) return { ok: false, error: body.error || "Envoi impossible." };
+    // Appareil reconnu : la session est déjà ouverte, pas de code.
+    if (body.trusted) {
+      setStatus("chargement");
+      await reload();
+    }
+    return { ok: true, trusted: Boolean(body.trusted) };
+  }, [reload]);
 
   const verifyCode = useCallback(
-    async (code) => {
+    async (code, remember) => {
       const response = await fetch("/api/login/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code }),
+        body: JSON.stringify({ code, remember }),
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) return { ok: false, error: body.error || "Code invalide." };

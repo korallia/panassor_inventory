@@ -13,9 +13,19 @@ import { imageRoute } from "./images.js";
 const app = express();
 app.use(express.json());
 
-// Connexion par courriel + code (voir auth.js).
-app.post("/api/login/code", requestCode);
-app.post("/api/login/verify", verifyCode);
+// Connexion par courriel + code (voir auth.js). Une panne (base, Resend…)
+// est écrite dans les journaux Vercel et renvoie un message clair.
+const safe = (handler) => async (req, res) => {
+  try {
+    await handler(req, res);
+  } catch (error) {
+    console.error(`[atelier] ${req.path} :`, error.message);
+    if (!res.headersSent) res.status(500).json({ error: `Erreur du serveur : ${error.message}` });
+  }
+};
+
+app.post("/api/login/code", safe(requestCode));
+app.post("/api/login/verify", safe(verifyCode));
 
 app.post("/api/logout", (req, res) => {
   clearSessionCookie(res);

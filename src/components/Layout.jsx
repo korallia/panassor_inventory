@@ -25,6 +25,7 @@ function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
+  const [remember, setRemember] = useState(true);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -34,6 +35,7 @@ function Login() {
     const result = await requestCode(email, password);
     setBusy(false);
     if (!result.ok) return setMessage(result.error);
+    if (result.trusted) return;
     setMessage("");
     setCode("");
     setPassword("");
@@ -43,7 +45,7 @@ function Login() {
   async function submitCode(event) {
     event.preventDefault();
     setBusy(true);
-    const result = await verifyCode(code);
+    const result = await verifyCode(code, remember);
     setBusy(false);
     if (!result.ok) setMessage(result.error);
   }
@@ -84,6 +86,10 @@ function Login() {
                 value={code}
                 onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
               />
+            </label>
+            <label className="flex items-center gap-2 text-[15px] text-muted">
+              <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+              Se souvenir de cet appareil (90 jours)
             </label>
           </>
         )}
