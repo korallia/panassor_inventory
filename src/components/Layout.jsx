@@ -190,7 +190,7 @@ export default function Layout() {
         {source === "live" && (
           <button
             type="button"
-            className="btn-ghost mt-4 hidden w-full px-2! text-[13px]! whitespace-nowrap lg:block lg:mt-6"
+            className="btn-ghost mt-4 hidden w-full px-2! text-[13px]! whitespace-nowrap lg:block lg:mt-10"
             onClick={logout}
           >
             Se déconnecter
