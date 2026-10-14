@@ -36,6 +36,13 @@ export const config = {
     locationId: required("SQUARE_LOCATION_ID"),
     environment: process.env.SQUARE_ENVIRONMENT === "production" ? "production" : "sandbox",
   },
-  password: required("ATELIER_PASSWORD"),
-  sessionSecret: process.env.ATELIER_SESSION_SECRET || required("ATELIER_PASSWORD"),
+  // En ligne, un vrai secret est obligatoire ; en local, une valeur par défaut suffit.
+  sessionSecret: process.env.VERCEL
+    ? required("ATELIER_SESSION_SECRET")
+    : process.env.ATELIER_SESSION_SECRET || "atelier-local",
+  resend: {
+    // En ligne, obligatoire : sans lui, personne ne recevrait de code.
+    apiKey: process.env.VERCEL ? required("RESEND_API_KEY") : process.env.RESEND_API_KEY || "",
+    fromEmail: process.env.RESEND_FROM_EMAIL || "Panassor <support@panassor.ca>",
+  },
 };
