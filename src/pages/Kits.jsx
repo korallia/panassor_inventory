@@ -104,7 +104,7 @@ export default function Kits() {
                 <span className="h-7 w-7 shrink-0 border border-line" style={{ background: leather.swatch }} />
                 <span className="text-[19px] text-cream">{leather.color}</span>
               </span>
-              <StockControl stockId={leather.stockId} value={leather.stock}>
+              <StockControl stockId={leather.stockId} value={leather.stock} label={`Étuis ${leather.color}`}>
                 <Stepper
                   small
                   label={`Étuis ${leather.color}`}

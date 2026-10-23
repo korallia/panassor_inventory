@@ -12,22 +12,39 @@ const REASONS = {
   retirer: ["Perte", "Correction"],
 };
 
-/** Bouton « Ajuster » (vraies données) ou − / + (données d'exemple). */
-export function StockControl({ stockId, value, children }) {
-  const { source, openAdjust } = useInventory();
+/**
+ * Vraies données : − / + changent le stock de 1 tout de suite, et un clic sur
+ * le chiffre ouvre la fenêtre Ajuster. Données d'exemple : le − / + de test.
+ */
+export function StockControl({ stockId, value, label, children }) {
+  const { source, openAdjust, adjustStock } = useInventory();
+  const [busy, setBusy] = useState(false);
   if (source !== "live") return children;
+
+  const step = async (action) => {
+    if (!stockId || busy) return;
+    setBusy(true);
+    await adjustStock(stockId, { action, amount: 1 });
+    setBusy(false);
+  };
+  const side = "h-9 w-9 cursor-pointer border border-line bg-panel2 text-[20px] text-cream hover:bg-gold/8 disabled:cursor-not-allowed disabled:opacity-40";
+
   return (
-    <div className="inline-flex items-stretch">
-      <div className="inline-flex h-9 w-14 items-center justify-center border border-line/50 text-[18px] text-parch tabular-nums">
-        {value}
-      </div>
+    <div className="inline-flex items-stretch" role="group" aria-label={label}>
+      <button type="button" aria-label="Retirer 1" className={side} disabled={!stockId || busy || value <= 0} onClick={() => step("retirer")}>
+        −
+      </button>
       <button
         type="button"
         disabled={!stockId}
         onClick={() => openAdjust(stockId)}
-        className="sc h-9 cursor-pointer border border-l-0 border-line bg-panel2 px-3 text-[12px] tracking-[.14em] text-gold-light hover:text-cream disabled:cursor-not-allowed disabled:opacity-40"
+        title="Ajuster le stock"
+        className="h-9 w-16 cursor-pointer border-y border-line bg-ink text-[18px] text-parch tabular-nums hover:bg-gold/8 disabled:cursor-not-allowed"
       >
-        Ajuster
+        {value}
+      </button>
+      <button type="button" aria-label="Ajouter 1" className={side} disabled={!stockId || busy} onClick={() => step("ajouter")}>
+        +
       </button>
     </div>
   );
