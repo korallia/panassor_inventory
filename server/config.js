@@ -25,7 +25,9 @@ export const config = {
   databaseUrl,
   databaseHost: (() => {
     try {
-      return new URL(databaseUrl).hostname.split(".").slice(-3).join(".");
+      // Hôte complet + utilisateur (jamais le mot de passe) : on voit tout de suite quelle base est utilisée.
+      const url = new URL(databaseUrl);
+      return `${url.hostname} (${url.username})`;
     } catch {
       return "?";
     }
