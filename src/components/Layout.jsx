@@ -2,6 +2,7 @@ import { useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 
 import { useInventory } from "../store.jsx";
+import AjusterPanel from "./Ajuster.jsx";
 
 const sections = [
   { to: "/inventaire", label: "Inventaire" },
@@ -213,6 +214,7 @@ export default function Layout() {
       <main className="min-w-0 flex-1 px-4 py-6 sm:px-8 lg:px-12 lg:py-9">
         <Outlet />
       </main>
+      <AjusterPanel />
     </div>
   );
 }
