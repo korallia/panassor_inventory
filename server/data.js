@@ -5,13 +5,13 @@ import pg from "pg";
 
 import { config } from "./config.js";
 
-const pool = new pg.Pool({ connectionString: config.databaseUrl, ssl: config.databaseSsl, max: 3 });
+export const pool = new pg.Pool({ connectionString: config.databaseUrl, ssl: config.databaseSsl, max: 3 });
 
-// Garde-fou : chaque requête tourne dans une transaction READ ONLY.
-// Même par erreur, un INSERT/UPDATE/DELETE serait refusé par Postgres.
-// Seule écriture permise à l'atelier pour l'instant : son propre compte
-// (courriel, mot de passe). L'utilisateur Postgres atelier_app n'a de toute
-// façon le droit de modifier que ces deux colonnes.
+// Garde-fou : la lecture passe par readOnly (transaction READ ONLY) : même
+// par erreur, un INSERT/UPDATE/DELETE y serait refusé par Postgres.
+// Les seules écritures de l'atelier : son propre compte (writeAccount) et
+// le stock (server/stock.js). L'utilisateur Postgres atelier_app n'a de
+// toute façon le droit d'écrire que là (migrations 012 à 014).
 export async function writeAccount(sql, params = []) {
   return pool.query(sql, params);
 }
@@ -31,40 +31,6 @@ export async function readOnly(sql, params = []) {
   }
 }
 
-const SQUARE_BASE = process.env.SQUARE_BASE_URL_OVERRIDE || (config.square.environment === "production" ? "https://connect.squareup.com" : "https://connect.squareupsandbox.com");
-
-/** Stock Square (IN_STOCK) pour une liste de variations. Route de lecture seulement. */
-async function fetchSquareCounts(variationIds) {
-  const counts = {};
-  const ids = [...new Set(variationIds.filter(Boolean))];
-  for (let i = 0; i < ids.length; i += 500) {
-    let cursor;
-    do {
-      const response = await fetch(`${SQUARE_BASE}/v2/inventory/counts/batch-retrieve`, {
-        method: "POST",
-        headers: {
-          "Square-Version": "2026-06-18",
-          Authorization: `Bearer ${config.square.accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          catalog_object_ids: ids.slice(i, i + 500),
-          location_ids: [config.square.locationId],
-          states: ["IN_STOCK"],
-          cursor,
-        }),
-      });
-      const body = await response.json();
-      if (!response.ok) throw new Error(`Square ${response.status} : ${body?.errors?.[0]?.detail || "erreur"}`);
-      for (const count of body.counts || []) {
-        counts[count.catalog_object_id] = (counts[count.catalog_object_id] || 0) + Number(count.quantity || 0);
-      }
-      cursor = body.cursor;
-    } while (cursor);
-  }
-  return counts;
-}
-
 // Ce que la base ne décrit pas encore (composition des ensembles…) : server/atelier.config.json
 function readAtelierConfig() {
   try {
@@ -76,39 +42,39 @@ function readAtelierConfig() {
 
 export async function loadAtelierData() {
   const atelierConfig = readAtelierConfig();
-  const [collectionsRes, productsRes, imagesRes, variantsRes, componentsRes] = await Promise.all([
+  const [collectionsRes, productsRes, imagesRes, variantsRes, componentsRes, stockRes] = await Promise.all([
     readOnly(`SELECT id, name_fr, status FROM collections ORDER BY name_fr`),
     readOnly(`
       SELECT id, collection_id, slug_fr, name_fr, name_en, title_fr, title_en,
              description_fr, description_en, long_description_fr, long_description_en,
-             price_cents, customizable, is_kit, square_default_variation_id
+             price_cents, customizable, is_kit
       FROM products ORDER BY name_fr`),
     readOnly(`
       SELECT pi.product_id, pi.url, pi.alt_fr, pi.alt_en, pi.is_main, pi.sort_order, c.name_fr AS color
       FROM product_images pi LEFT JOIN colors c ON c.id = pi.color_id
       ORDER BY pi.product_id, pi.sort_order`),
+    // Variantes de couleur (étuis des kits).
     readOnly(`
-      SELECT pcv.product_id, pcv.square_variation_id, pcv.price_delta_cents, c.name_fr AS color, c.hex_code
+      SELECT pcv.id, pcv.product_id, pcv.price_delta_cents, c.name_fr AS color, c.hex_code
       FROM product_color_variants pcv JOIN colors c ON c.id = pcv.color_id
       ORDER BY pcv.product_id, c.name_fr`),
     readOnly(`SELECT kit_product_id, included_product_id, quantity FROM kit_components ORDER BY kit_product_id, sort_order`),
+    // Le stock vit dans la base (migration 014) : une ligne par produit, ou par variante.
+    readOnly(`SELECT id, product_id, variant_id, quantity FROM stock`),
   ]);
 
   const variantsByProduct = {};
   for (const v of variantsRes.rows) (variantsByProduct[v.product_id] ||= []).push(v);
+  const colorVariantsOf = (productId) => variantsByProduct[productId] || [];
 
-  const variationIds = [
-    ...productsRes.rows.map((p) => p.square_default_variation_id),
-    ...variantsRes.rows.map((v) => v.square_variation_id),
-  ];
-  const counts = await fetchSquareCounts(variationIds);
-
-  // Stock d'un produit : ses variations de couleur, sinon sa variation par défaut.
-  const stockOf = (product) => {
-    const variants = (variantsByProduct[product.id] || []).filter((v) => v.square_variation_id);
-    if (variants.length) return variants.reduce((sum, v) => sum + (counts[v.square_variation_id] || 0), 0);
-    return counts[product.square_default_variation_id] || 0;
-  };
+  const stockByProduct = {};
+  const stockByVariant = {};
+  for (const row of stockRes.rows) {
+    if (row.variant_id == null) stockByProduct[row.product_id] = row;
+    else stockByVariant[row.variant_id] = row;
+  }
+  // Une ligne de stock vue par l'atelier : son id sert aux boutons « Ajuster ».
+  const line = (row) => ({ stockId: row ? String(row.id) : null, stock: row?.quantity ?? 0, min: 0 });
 
   const id = (value) => String(value);
   const kitsRows = productsRes.rows.filter((p) => p.is_kit);
@@ -138,7 +104,6 @@ export async function loadAtelierData() {
       };
     }
   }
-  const paquets = atelierConfig.paquets || {};
 
   const products = pieceRows.map((p) => {
     const ensemble = ensembles[p.slug_fr];
@@ -155,38 +120,22 @@ export async function loadAtelierData() {
           .map((c) => ({ productId: id(bySlug[c.slug].id), qty: c.qty || 1 })),
       };
     }
-    const paquet = paquets[p.slug_fr];
-    if (paquet) {
-      // Paquet (aiguilles de suture) : Square compte les paquets complets ;
-      // les aiguilles seules (orphelines) sont notées dans la config.
-      const complete = stockOf(p);
-      return {
-        id: id(p.id),
-        collectionId: id(p.collection_id),
-        name: p.name_fr,
-        type: "paquet",
-        min: 0,
-        inKit: inAKit.has(id(p.id)),
-        packTypes: paquet.types.map((t) => ({ id: t.id, name: t.name, stock: complete + (t.orphelines || 0) })),
-      };
-    }
     return {
       id: id(p.id),
       collectionId: id(p.collection_id),
       name: p.name_fr,
       type: p.customizable ? "outil" : "piece",
-      stock: stockOf(p),
-      min: 0,
+      ...line(stockByProduct[p.id]),
       inKit: inAKit.has(id(p.id)),
     };
   });
 
   const kits = kitsRows.map((k) => {
-    const variants = variantsByProduct[k.id] || [];
-    // Étuis : une ligne par couleur du kit (stock Square de la variation de couleur).
+    const variants = colorVariantsOf(k.id);
+    // Étuis : une ligne par couleur du kit (stock de la variante de couleur).
     const leather = variants.length
-      ? variants.map((v) => ({ color: v.color, swatch: v.hex_code || "#2a180c", stock: counts[v.square_variation_id] || 0, min: 0 }))
-      : [{ color: "Étuis", swatch: "#2a180c", stock: counts[k.square_default_variation_id] || 0, min: 0 }];
+      ? variants.map((v) => ({ color: v.color, swatch: v.hex_code || "#2a180c", ...line(stockByVariant[v.id]) }))
+      : [{ color: "Étuis", swatch: "#2a180c", ...line(stockByProduct[k.id]) }];
     return {
       id: id(k.id),
       collectionId: id(k.collection_id),
@@ -210,7 +159,7 @@ export async function loadAtelierData() {
     id: id(p.id),
     collectionId: id(p.collection_id),
     isKit: p.is_kit,
-    type: p.is_kit ? undefined : ensembles[p.slug_fr] ? "ensemble" : paquets[p.slug_fr] ? "paquet" : p.customizable ? "outil" : "piece",
+    type: p.is_kit ? undefined : ensembles[p.slug_fr] ? "ensemble" : p.customizable ? "outil" : "piece",
     nameFr: p.name_fr || "",
     nameEn: p.name_en || "",
     titleFr: p.title_fr || "",
@@ -227,18 +176,17 @@ export async function loadAtelierData() {
       main: img.is_main,
       color: img.color || null, // photo propre à une variante de couleur (product_images.color_id)
     })),
-    // Sous-produits : variantes de couleur (table product_color_variants), avec écart de prix et stock Square.
-    variants: (variantsByProduct[p.id] || []).map((v) => ({
+    // Sous-produits : variantes de couleur (table product_color_variants), avec écart de prix et stock.
+    variants: colorVariantsOf(p.id).map((v) => ({
       color: v.color,
       swatch: v.hex_code || "#2a180c",
       priceDelta: Number(v.price_delta_cents || 0) / 100,
-      stock: v.square_variation_id ? counts[v.square_variation_id] || 0 : null,
+      stock: stockByVariant[v.id]?.quantity ?? null,
     })),
   }));
 
   return {
     source: "live",
-    environment: config.square.environment,
     loadedAt: new Date().toISOString(),
     collections,
     products,

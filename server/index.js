@@ -4,6 +4,6 @@ import { config } from "./config.js";
 import app from "./app.js";
 
 app.listen(config.port, "127.0.0.1", () => {
-  console.log(`[atelier] serveur lecture seule sur http://127.0.0.1:${config.port}`);
-  console.log(`[atelier] Square : ${config.square.environment} · base : ${config.databaseHost}`);
+  console.log(`[atelier] serveur sur http://127.0.0.1:${config.port}`);
+  console.log(`[atelier] base : ${config.databaseHost}`);
 });

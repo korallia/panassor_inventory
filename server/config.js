@@ -31,11 +31,6 @@ export const config = {
     }
   })(),
   databaseSsl: process.env.DB_DISABLE_SSL === "true" ? false : { rejectUnauthorized: false },
-  square: {
-    accessToken: required("SQUARE_ACCESS_TOKEN"),
-    locationId: required("SQUARE_LOCATION_ID"),
-    environment: process.env.SQUARE_ENVIRONMENT === "production" ? "production" : "sandbox",
-  },
   // En ligne, un vrai secret est obligatoire ; en local, une valeur par défaut suffit.
   sessionSecret: process.env.VERCEL
     ? required("ATELIER_SESSION_SECRET")
