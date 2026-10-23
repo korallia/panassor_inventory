@@ -104,7 +104,7 @@ export default function AjusterPanel() {
           <div className="lbl pr-12">{line.detail} · ajuster le stock</div>
           <h2 className="sc m-0 mt-2 pr-12 text-[28px] leading-tight font-normal text-cream sm:text-[34px]">{line.name}</h2>
           <div className="mt-3 flex justify-end">
-            <div role="radiogroup" aria-label="Ajouter ou retirer" className="flex w-full max-w-[340px] rounded-full border border-line p-1">
+            <div role="radiogroup" aria-label="Ajouter ou retirer" className="flex w-full max-w-[340px] rounded-full border border-line/70 p-1">
               {ACTIONS.map((a) => (
                 <button
                   key={a.id}
@@ -117,7 +117,7 @@ export default function AjusterPanel() {
                     setError(null);
                   }}
                   className={`h-11 flex-1 cursor-pointer rounded-full border-0 text-[19px] ${
-                    action === a.id ? "bg-gold text-ink" : "bg-transparent text-muted hover:text-cream"
+                    action === a.id ? "bg-gold/15 text-cream ring-1 ring-gold/60" : "bg-transparent text-muted2 hover:text-cream"
                   }`}
                 >
                   {a.label}
@@ -126,8 +126,6 @@ export default function AjusterPanel() {
             </div>
           </div>
         </div>
-
-        <div className="h-px bg-gold/45" />
 
         <div className="flex items-center justify-center gap-10 border border-line bg-panel2 px-6 py-5 tabular-nums">
           <div className="flex w-28 flex-col items-center gap-1.5">
@@ -141,15 +139,15 @@ export default function AjusterPanel() {
           </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-6">
+        <div className="mt-2 grid gap-6 sm:grid-cols-2">
           <div className="flex flex-col gap-2.5">
             <span className="lbl text-[14px]!">Quantité</span>
-            <div className="flex items-stretch" role="group" aria-label="Quantité">
+            <div className="flex h-14 items-stretch border border-line focus-within:border-gold" role="group" aria-label="Quantité">
               <button
                 type="button"
                 aria-label="Un de moins"
                 onClick={() => setQuantity(String(Math.max(1, amount - 1)))}
-                className="h-14 w-12 cursor-pointer border border-line bg-panel2 text-[24px] text-gold-light hover:text-cream"
+                className="w-14 cursor-pointer border-0 bg-transparent text-[24px] text-gold-light hover:bg-gold/8 hover:text-cream"
               >
                 −
               </button>
@@ -157,7 +155,7 @@ export default function AjusterPanel() {
                 autoFocus
                 inputMode="numeric"
                 aria-label="Quantité"
-                className="h-14 w-24 border-y border-gold bg-ink text-center text-[28px] text-cream tabular-nums outline-none focus:border-gold-light"
+                className="min-w-0 flex-1 border-x border-y-0 border-line/60 bg-ink text-center text-[24px] text-cream tabular-nums outline-none"
                 value={quantity}
                 onFocus={(event) => event.target.select()}
                 onChange={(event) => setQuantity(event.target.value.replace(/\D/g, "").slice(0, 6))}
@@ -166,13 +164,13 @@ export default function AjusterPanel() {
                 type="button"
                 aria-label="Un de plus"
                 onClick={() => setQuantity(String(amount + 1))}
-                className="h-14 w-12 cursor-pointer border border-line bg-panel2 text-[24px] text-gold-light hover:text-cream"
+                className="w-14 cursor-pointer border-0 bg-transparent text-[24px] text-gold-light hover:bg-gold/8 hover:text-cream"
               >
                 +
               </button>
             </div>
           </div>
-          <label className="flex min-w-[200px] flex-1 flex-col gap-2.5">
+          <label className="flex flex-col gap-2.5">
             <span className="lbl text-[14px]!">Raison</span>
             <select className="field h-14! text-[20px]!" value={reason} onChange={(event) => setReason(event.target.value)}>
               {REASONS[action].map((r) => (
@@ -188,7 +186,11 @@ export default function AjusterPanel() {
         {after < 0 && <div className="text-[16px] text-alert">Il n'y en a que {before} en stock.</div>}
 
         <div className="flex justify-end">
-          <button type="submit" className="btn-primary px-10!" disabled={invalid || busy}>
+          <button
+            type="submit"
+            disabled={invalid || busy}
+            className="sc h-11 cursor-pointer border border-btn-line/70 bg-transparent px-8 text-[14px] tracking-[.14em] text-btn-text hover:bg-btn disabled:cursor-not-allowed disabled:opacity-40"
+          >
             {busy ? "Enregistrement…" : "Confirmer"}
           </button>
         </div>
