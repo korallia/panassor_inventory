@@ -103,28 +103,6 @@ export default function AjusterPanel() {
         <div>
           <div className="lbl pr-12">{line.detail} · ajuster le stock</div>
           <h2 className="sc m-0 mt-2 pr-12 text-[28px] leading-tight font-normal text-cream sm:text-[34px]">{line.name}</h2>
-          <div className="mt-3 flex justify-end">
-            <div role="radiogroup" aria-label="Ajouter ou retirer" className="flex w-full max-w-[340px] rounded-full border border-line/70 p-1">
-              {ACTIONS.map((a) => (
-                <button
-                  key={a.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={action === a.id}
-                  onClick={() => {
-                    setAction(a.id);
-                    setReason(REASONS[a.id][0]);
-                    setError(null);
-                  }}
-                  className={`h-11 flex-1 cursor-pointer rounded-full border-0 text-[19px] ${
-                    action === a.id ? "bg-gold/15 text-cream ring-1 ring-gold/60" : "bg-transparent text-muted2 hover:text-cream"
-                  }`}
-                >
-                  {a.label}
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
 
         <div className="flex items-center justify-center gap-10 border border-line bg-panel2 px-6 py-5 tabular-nums">
@@ -139,8 +117,8 @@ export default function AjusterPanel() {
           </div>
         </div>
 
-        <div className="mt-2 grid gap-6 sm:grid-cols-2">
-          <div className="flex flex-col gap-2.5">
+        <div className="mt-2 grid grid-cols-1 gap-6 sm:grid-cols-2">
+          <div className="flex min-w-0 flex-col gap-2.5">
             <span className="lbl text-[14px]!">Quantité</span>
             <div className="flex h-14 items-stretch border border-line focus-within:border-gold" role="group" aria-label="Quantité">
               <button
@@ -170,9 +148,9 @@ export default function AjusterPanel() {
               </button>
             </div>
           </div>
-          <label className="flex flex-col gap-2.5">
+          <label className="flex min-w-0 flex-col gap-2.5">
             <span className="lbl text-[14px]!">Raison</span>
-            <select className="field h-14! text-[20px]!" value={reason} onChange={(event) => setReason(event.target.value)}>
+            <select className="field h-14! w-full! min-w-0 text-[20px]!" value={reason} onChange={(event) => setReason(event.target.value)}>
               {REASONS[action].map((r) => (
                 <option key={r} value={r}>
                   {r}
@@ -185,11 +163,31 @@ export default function AjusterPanel() {
         {error && <div className="text-[16px] text-alert">{error}</div>}
         {after < 0 && <div className="text-[16px] text-alert">Il n'y en a que {before} en stock.</div>}
 
-        <div className="flex justify-end">
+        <div className="flex items-center justify-between gap-4">
+          <div role="radiogroup" aria-label="Ajouter ou retirer" className="flex h-11 rounded-full border border-line/70 p-[3px]">
+            {ACTIONS.map((a) => (
+              <button
+                key={a.id}
+                type="button"
+                role="radio"
+                aria-checked={action === a.id}
+                onClick={() => {
+                  setAction(a.id);
+                  setReason(REASONS[a.id][0]);
+                  setError(null);
+                }}
+                className={`cursor-pointer rounded-full border-0 px-3 text-[15px] sm:px-4 ${
+                  action === a.id ? "bg-gold/15 text-cream ring-1 ring-gold/60" : "bg-transparent text-muted2 hover:text-cream"
+                }`}
+              >
+                {a.label}
+              </button>
+            ))}
+          </div>
           <button
             type="submit"
             disabled={invalid || busy}
-            className="sc h-11 cursor-pointer border border-btn-line/70 bg-transparent px-8 text-[14px] tracking-[.14em] text-btn-text hover:bg-btn disabled:cursor-not-allowed disabled:opacity-40"
+            className="sc h-11 shrink-0 cursor-pointer border border-btn-line/70 bg-transparent px-4 text-[13px] tracking-[.12em] sm:px-8 sm:text-[14px] sm:tracking-[.14em] text-btn-text hover:bg-btn disabled:cursor-not-allowed disabled:opacity-40"
           >
             {busy ? "Enregistrement…" : "Confirmer"}
           </button>
