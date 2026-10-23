@@ -1,6 +1,6 @@
 // Fenêtre « Ajuster » : s'ouvre au milieu de l'écran, par-dessus la page.
-// Interrupteur Ajouter / Retirer, quantité tapée au clavier, et l'aperçu
-// « Après 12 → 18 » montre le résultat avant de confirmer.
+// Interrupteur Ajouter / Retirer, quantité (clavier ou − / +), et l'aperçu
+// « en stock → après » montre le résultat avant de confirmer.
 import { useEffect, useState } from "react";
 
 import { useInventory } from "../store.jsx";
@@ -104,7 +104,7 @@ export default function AjusterPanel() {
           <div className="lbl pr-12">{line.detail} · ajuster le stock</div>
           <h2 className="sc m-0 mt-2 pr-12 text-[28px] leading-tight font-normal text-cream sm:text-[34px]">{line.name}</h2>
           <div className="mt-3 flex justify-end">
-            <div role="radiogroup" aria-label="Ajouter ou retirer" className="flex rounded-full border border-line p-[3px]">
+            <div role="radiogroup" aria-label="Ajouter ou retirer" className="flex w-full max-w-[340px] rounded-full border border-line p-1">
               {ACTIONS.map((a) => (
                 <button
                   key={a.id}
@@ -116,7 +116,7 @@ export default function AjusterPanel() {
                     setReason(REASONS[a.id][0]);
                     setError(null);
                   }}
-                  className={`cursor-pointer rounded-full border-0 px-[18px] py-1.5 text-[16px] ${
+                  className={`h-11 flex-1 cursor-pointer rounded-full border-0 text-[19px] ${
                     action === a.id ? "bg-gold text-ink" : "bg-transparent text-muted hover:text-cream"
                   }`}
                 >
@@ -129,27 +129,49 @@ export default function AjusterPanel() {
 
         <div className="h-px bg-gold/45" />
 
-        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border border-line bg-panel2 px-6 py-4 tabular-nums">
-          <span className="lbl">Après</span>
-          <span className="text-[34px] text-muted">{before}</span>
-          <span className="text-[28px] text-gold">→</span>
-          <span className={`text-[44px] leading-none ${after < 0 ? "text-alert" : "text-cream"}`}>{after}</span>
-          <span className="text-[18px] text-faint">en stock</span>
+        <div className="flex items-center justify-center gap-10 border border-line bg-panel2 px-6 py-5 tabular-nums">
+          <div className="flex w-28 flex-col items-center gap-1.5">
+            <span className="text-[44px] leading-none text-muted">{before}</span>
+            <span className="lbl whitespace-nowrap">En stock</span>
+          </div>
+          <span className="text-[30px] leading-none text-gold">→</span>
+          <div className="flex w-28 flex-col items-center gap-1.5">
+            <span className={`text-[44px] leading-none ${after < 0 ? "text-alert" : "text-cream"}`}>{after}</span>
+            <span className="lbl">Après</span>
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-6">
-          <label className="flex flex-col gap-2.5">
+          <div className="flex flex-col gap-2.5">
             <span className="lbl">Quantité</span>
-            <input
-              autoFocus
-              inputMode="numeric"
-              aria-label="Quantité"
-              className="h-14 w-[150px] border border-gold bg-ink text-center text-[30px] text-cream tabular-nums outline-none focus:border-gold-light"
-              value={quantity}
-              onFocus={(event) => event.target.select()}
-              onChange={(event) => setQuantity(event.target.value.replace(/\D/g, "").slice(0, 6))}
-            />
-          </label>
+            <div className="flex items-stretch" role="group" aria-label="Quantité">
+              <button
+                type="button"
+                aria-label="Un de moins"
+                onClick={() => setQuantity(String(Math.max(1, amount - 1)))}
+                className="h-14 w-12 cursor-pointer border border-line bg-panel2 text-[24px] text-gold-light hover:text-cream"
+              >
+                −
+              </button>
+              <input
+                autoFocus
+                inputMode="numeric"
+                aria-label="Quantité"
+                className="h-14 w-24 border-y border-gold bg-ink text-center text-[28px] text-cream tabular-nums outline-none focus:border-gold-light"
+                value={quantity}
+                onFocus={(event) => event.target.select()}
+                onChange={(event) => setQuantity(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              />
+              <button
+                type="button"
+                aria-label="Un de plus"
+                onClick={() => setQuantity(String(amount + 1))}
+                className="h-14 w-12 cursor-pointer border border-line bg-panel2 text-[24px] text-gold-light hover:text-cream"
+              >
+                +
+              </button>
+            </div>
+          </div>
           <label className="flex min-w-[200px] flex-1 flex-col gap-2.5">
             <span className="lbl">Raison</span>
             <select className="field h-14! text-[20px]!" value={reason} onChange={(event) => setReason(event.target.value)}>
@@ -165,11 +187,8 @@ export default function AjusterPanel() {
         {error && <div className="text-[16px] text-alert">{error}</div>}
         {after < 0 && <div className="text-[16px] text-alert">Il n'y en a que {before} en stock.</div>}
 
-        <div className="flex flex-wrap justify-end gap-3.5">
-          <button type="button" className="btn-ghost h-[58px]! px-7!" onClick={closeAdjust}>
-            Annuler
-          </button>
-          <button type="submit" className="btn-primary h-[58px]! px-10!" disabled={invalid || busy}>
+        <div className="flex justify-end">
+          <button type="submit" className="btn-primary px-10!" disabled={invalid || busy}>
             {busy ? "Enregistrement…" : "Confirmer"}
           </button>
         </div>
