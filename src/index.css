@@ -63,6 +63,24 @@ a:hover {
     letter-spacing: 0.3em;
     color: var(--color-gold);
   }
+  /* Sous-titre gris : petites capitales doré pâle (ex. « pour les kits », « objectif : … »). */
+  .sub {
+    font-family: var(--font-sc);
+    text-transform: uppercase;
+    font-size: 12px;
+    line-height: 1.3;
+    letter-spacing: 0.12em;
+    color: var(--color-faint);
+  }
+  /* Chiffre dans un sous-titre : Garamond, un ton plus clair, un peu d'espace autour. */
+  .sub-num {
+    font-family: var(--font-serif);
+    text-transform: none;
+    font-size: 14px;
+    letter-spacing: normal;
+    color: var(--color-muted2);
+    margin: 0 0.25rem;
+  }
   .lbl {
     font-family: var(--font-sc);
     text-transform: uppercase;

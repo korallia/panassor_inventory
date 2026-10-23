@@ -96,7 +96,7 @@ export default function Kits() {
 
           <div className="mt-6 flex items-baseline justify-between gap-3 border-t border-gold/60 pt-5">
             <div className="sc text-[16px] tracking-[.16em] text-gold">Étuis de cuir</div>
-            <div className="text-[15px] text-faint">fixent les kits visés</div>
+            <div className="sub">fixent les kits visés</div>
           </div>
           {kit.leather.map((leather) => (
             <div key={leather.color} className="flex items-center justify-between gap-4 border-t border-line/35 py-3">

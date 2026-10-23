@@ -99,7 +99,7 @@ function Row({ name, hint, value, onChange, swatch, strong = false }) {
         <span className={strong ? "text-[22px] font-semibold text-cream" : "text-[19px] text-cream"}>{name}</span>
       </span>
       <span className="flex items-center gap-3">
-        {hint && <span className="text-[14px] text-faint">{hint}</span>}
+        {hint && <span className="sub">{hint}</span>}
         <Stepper small label={`Minimum ${name}`} value={value} onChange={onChange} />
       </span>
     </div>
