@@ -469,13 +469,13 @@ export function Stepper({ value, onChange, label, small = false, disabled = fals
 }
 
 export function SampleNote() {
-  const { source, environment, loadedAt, error } = useInventory();
+  const { source, loadedAt, error } = useInventory();
   if (error) return <div className="text-[14px] text-alert">Lecture des vraies données impossible : {error}. Données d'exemple affichées.</div>;
   if (source === "live") {
     const time = loadedAt ? new Date(loadedAt).toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" }) : "";
     return (
       <div className="text-[14px] text-faint">
-        Vraies données · lecture seule · Square {environment === "production" ? "production" : "sandbox"} · lues à {time}
+        Vraies données · stock de la base · lues à {time}
       </div>
     );
   }

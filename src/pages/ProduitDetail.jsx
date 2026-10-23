@@ -25,6 +25,7 @@ import {
   Stepper,
   typeLabel,
 } from "../components/ui.jsx";
+import { StockControl } from "../components/Ajuster.jsx";
 
 export default function ProduitDetail() {
   const { id } = useParams();
@@ -75,7 +76,7 @@ function kitsNote(kitsUsing) {
 
 // ---------------------------------------------------------------- 1C
 function PieceDetail({ product, collectionName }) {
-  const { readOnly, reserved, dispatch } = useInventory();
+  const { reserved, dispatch } = useInventory();
   const state = productState(product, reserved);
   const kitsUsing = useKitsUsing(product.id);
   const toReserve = reservedTarget(product.id, kitsUsing);
@@ -108,13 +109,14 @@ function PieceDetail({ product, collectionName }) {
             <div className="w-[130px]">
               <div className="text-[21px] text-cream">{product.name}</div>
               <div className="mt-2">
-                <Stepper
-                  small
-                  label={`Stock ${product.name}`}
-                    disabled={readOnly}
-                  value={product.stock}
-                  onChange={(value) => dispatch({ type: "setStock", productId: product.id, value })}
-                />
+                <StockControl stockId={product.stockId} value={product.stock}>
+                  <Stepper
+                    small
+                    label={`Stock ${product.name}`}
+                    value={product.stock}
+                    onChange={(value) => dispatch({ type: "setStock", productId: product.id, value })}
+                  />
+                </StockControl>
               </div>
             </div>
             <div className="order-last w-full min-w-0 sm:order-none sm:w-auto sm:flex-1">
