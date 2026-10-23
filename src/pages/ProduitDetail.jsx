@@ -25,7 +25,6 @@ import {
   Stepper,
   typeLabel,
 } from "../components/ui.jsx";
-import { StockControl } from "../components/Ajuster.jsx";
 
 export default function ProduitDetail() {
   const { id } = useParams();
@@ -76,7 +75,7 @@ function kitsNote(kitsUsing) {
 
 // ---------------------------------------------------------------- 1C
 function PieceDetail({ product, collectionName }) {
-  const { reserved, dispatch } = useInventory();
+  const { source, reserved, dispatch, openAdjust } = useInventory();
   const state = productState(product, reserved);
   const kitsUsing = useKitsUsing(product.id);
   const toReserve = reservedTarget(product.id, kitsUsing);
@@ -102,22 +101,29 @@ function PieceDetail({ product, collectionName }) {
         <section className="flex flex-col gap-2 border border-line/50 bg-panel/60 px-6 py-5">
           <div className="flex flex-wrap items-baseline justify-between gap-3">
             <div className="sc text-[16px] tracking-[.16em] text-gold">Pièces en stock</div>
-            <div className="text-[15px] text-faint">Objectif : {total.note} = {total.need}</div>
+            {/* Petites capitales comme « pour les kits », chiffres en Garamond, un ton plus clair, pour bien les lire. */}
+            <div className="sc text-[12px] leading-tight tracking-[.12em] text-faint">
+              Objectif : <span className="mx-1 font-serif text-[14px] tracking-normal text-muted2 normal-case">{toReserve}</span> réservés +{" "}
+              <span className="mx-1 font-serif text-[14px] tracking-normal text-muted2 normal-case">{state.min}</span> libres ={" "}
+              <span className="mx-1 font-serif text-[14px] tracking-normal text-muted2 normal-case">{total.need}</span>
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-4 border-t border-line/35 py-3">
             <div className="w-[130px]">
               <div className="text-[21px] text-cream">{product.name}</div>
-              <div className="mt-2">
-                <StockControl stockId={product.stockId} value={product.stock}>
+              {/* Données d'exemple seulement : − / + pour tester. Avec les vraies données,
+                  le stock se change par la fenêtre Ajuster (point d'entrée à placer). */}
+              {source !== "live" && (
+                <div className="mt-2">
                   <Stepper
                     small
                     label={`Stock ${product.name}`}
                     value={product.stock}
                     onChange={(value) => dispatch({ type: "setStock", productId: product.id, value })}
                   />
-                </StockControl>
-              </div>
+                </div>
+              )}
             </div>
             <div className="order-last w-full min-w-0 sm:order-none sm:w-auto sm:flex-1">
               <RowGauge have={state.stock} need={total.need} />
@@ -127,12 +133,35 @@ function PieceDetail({ product, collectionName }) {
             </div>
           </div>
 
-          <div className="mb-1.5 text-[15px] text-faint">
-            {state.reserved} réservés pour les kits + {state.free} libres pour la vente.
-          </div>
-          <div className="flex w-fit flex-wrap items-baseline gap-x-3 gap-y-1 border border-gold bg-panel2 px-4 py-2.5">
-            <span className="text-[30px] leading-none text-cream">{state.stock}</span>
-            <span className="text-[17px] text-muted">en stock</span>
+          {/* Trois boîtes : réservés pour les kits, libres pour la vente, total.
+              Les trois ouvrent la même fenêtre Ajuster (vraies données seulement) :
+              on ajoute ou retire du stock, et l'atelier calcule lui-même ce qui va
+              aux kits (réservés) et ce qui reste en vente (libres). */}
+          <div className="mt-1 grid grid-cols-3 gap-2.5">
+            {[
+              { label: "Réservés", note: "pour les kits", value: state.reserved },
+              { label: "Libres", note: "pour la vente", value: state.free },
+              { label: "Total", note: "en stock", value: state.stock },
+            ].map((box) => {
+              const onClick = source === "live" && product.stockId ? () => openAdjust(product.stockId) : null;
+              const Box = onClick ? "button" : "div";
+              return (
+                <Box
+                  key={box.label}
+                  type={onClick ? "button" : undefined}
+                  onClick={onClick || undefined}
+                  title={onClick ? "Ajuster le stock" : undefined}
+                  className={`flex flex-col items-center border border-gold/45 bg-panel2 px-2 pt-4 pb-4 text-center ${
+                    onClick ? "cursor-pointer transition-colors hover:border-gold hover:bg-gold/8" : ""
+                  }`}
+                >
+                  <span className="text-[28px] leading-none text-cream tabular-nums">{box.value}</span>
+                  {/* Titre et précision dans la même police (petites capitales), seule la couleur change. */}
+                  <span className="sc mt-3 text-[14px] leading-tight tracking-[.18em] text-gold">{box.label}</span>
+                  <span className="sc mt-2 text-[12px] leading-tight tracking-[.12em] text-faint">{box.note}</span>
+                </Box>
+              );
+            })}
           </div>
         </section>
       </DetailLayout>
