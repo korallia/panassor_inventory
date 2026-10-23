@@ -1,6 +1,6 @@
-// Panneau « Ajuster » (maquette B) : s'ouvre à droite, par-dessus la page.
-// On choisit Ajouter ou Retirer, la quantité, et l'aperçu « 12 → 15 »
-// montre le résultat avant de confirmer.
+// Fenêtre « Ajuster » : s'ouvre au milieu de l'écran, par-dessus la page.
+// Interrupteur Ajouter / Retirer, quantité tapée au clavier, et l'aperçu
+// « Après 12 → 18 » montre le résultat avant de confirmer.
 import { useEffect, useState } from "react";
 
 import { useInventory } from "../store.jsx";
@@ -9,6 +9,13 @@ const ACTIONS = [
   { id: "ajouter", label: "Ajouter" },
   { id: "retirer", label: "Retirer" },
 ];
+
+// Raisons : pour l'instant SEULEMENT dans l'interface (rien n'est envoyé ni
+// enregistré). Elles seront branchées sur la base avec l'étape historique.
+const REASONS = {
+  ajouter: ["Fabrication", "Correction"],
+  retirer: ["Perte", "Correction"],
+};
 
 /** Bouton « Ajuster » (vraies données) ou − / + (données d'exemple). */
 export function StockControl({ stockId, value, children }) {
@@ -36,14 +43,16 @@ export default function AjusterPanel() {
   const line = adjusting ? findStockLine(adjusting) : null;
 
   const [action, setAction] = useState("ajouter");
-  const [amount, setAmount] = useState(1);
+  const [quantity, setQuantity] = useState("1"); // texte : on peut l'effacer pour taper un autre nombre
+  const [reason, setReason] = useState(REASONS.ajouter[0]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
   // Nouvelle pièce : on repart à zéro.
   useEffect(() => {
     setAction("ajouter");
-    setAmount(1);
+    setQuantity("1");
+    setReason(REASONS.ajouter[0]);
     setError(null);
   }, [adjusting]);
 
@@ -56,6 +65,7 @@ export default function AjusterPanel() {
 
   if (!adjusting || !line) return null;
 
+  const amount = Number(quantity) || 0;
   const before = line.stock;
   const after = action === "ajouter" ? before + amount : before - amount;
   const invalid = amount < 1 || after < 0;
@@ -68,98 +78,102 @@ export default function AjusterPanel() {
     const result = await adjustStock(adjusting, { action, amount });
     setBusy(false);
     if (!result.ok) return setError(result.error);
-    setAmount(1);
+    closeAdjust();
   };
 
   return (
-    <>
-      <div className="fixed inset-0 z-40 bg-black/50" onClick={closeAdjust} aria-hidden="true" />
-      <aside
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4" onClick={closeAdjust}>
+      <form
         role="dialog"
+        aria-modal="true"
         aria-label={`Ajuster ${line.name}`}
-        className="fixed inset-y-0 right-0 z-50 flex w-full flex-col gap-5 overflow-y-auto border-l border-gold/70 bg-panel px-6 py-6 sm:w-[380px]"
+        onSubmit={submit}
+        onClick={(event) => event.stopPropagation()}
+        className="relative flex w-full max-w-[680px] flex-col gap-7 border border-gold/80 bg-panel px-6 py-8 sm:px-12 sm:py-10"
       >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="lbl">{line.detail}</div>
-            <div className="sc mt-1 text-[24px] leading-tight text-cream">{line.name}</div>
-            <div className="mt-1 text-[30px] leading-none text-cream tabular-nums">
-              {before} <span className="text-[15px] text-faint">en stock</span>
+        <button
+          type="button"
+          onClick={closeAdjust}
+          aria-label="Fermer"
+          className="absolute top-5 right-5 h-10 w-10 cursor-pointer border border-line bg-transparent text-[22px] leading-none text-gold-light hover:text-cream"
+        >
+          ×
+        </button>
+
+        <div>
+          <div className="lbl pr-12">{line.detail} · ajuster le stock</div>
+          <h2 className="sc m-0 mt-2 pr-12 text-[28px] leading-tight font-normal text-cream sm:text-[34px]">{line.name}</h2>
+          <div className="mt-3 flex justify-end">
+            <div role="radiogroup" aria-label="Ajouter ou retirer" className="flex rounded-full border border-line p-[3px]">
+              {ACTIONS.map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={action === a.id}
+                  onClick={() => {
+                    setAction(a.id);
+                    setReason(REASONS[a.id][0]);
+                    setError(null);
+                  }}
+                  className={`cursor-pointer rounded-full border-0 px-[18px] py-1.5 text-[16px] ${
+                    action === a.id ? "bg-gold text-ink" : "bg-transparent text-muted hover:text-cream"
+                  }`}
+                >
+                  {a.label}
+                </button>
+              ))}
             </div>
           </div>
-          <button
-            type="button"
-            onClick={closeAdjust}
-            aria-label="Fermer"
-            className="h-9 w-9 cursor-pointer border border-line bg-transparent text-[20px] leading-none text-gold-light hover:text-cream"
-          >
-            ×
-          </button>
         </div>
 
-        <form onSubmit={submit} className="flex flex-col gap-4">
-          <div role="radiogroup" aria-label="Action" className="flex gap-2">
-            {ACTIONS.map((a) => (
-              <button
-                key={a.id}
-                type="button"
-                role="radio"
-                aria-checked={action === a.id}
-                onClick={() => {
-                  setAction(a.id);
-                  setError(null);
-                }}
-                className={`h-10 flex-1 cursor-pointer border text-[16px] ${
-                  action === a.id ? "border-gold bg-gold/12 text-cream" : "border-line bg-transparent text-muted hover:text-cream"
-                }`}
-              >
-                {a.label}
-              </button>
-            ))}
-          </div>
+        <div className="h-px bg-gold/45" />
 
-          <div className="flex items-center justify-between gap-3">
-            <div className="inline-flex items-stretch" role="group" aria-label="Quantité">
-              <button
-                type="button"
-                aria-label="Un de moins"
-                onClick={() => setAmount((n) => Math.max(1, n - 1))}
-                className="h-10 w-10 cursor-pointer border border-line bg-panel2 text-[20px] text-gold-light hover:text-cream"
-              >
-                −
-              </button>
-              <input
-                aria-label="Quantité"
-                inputMode="numeric"
-                autoFocus
-                className="h-10 w-16 border-y border-line bg-ink text-center text-[19px] text-cream tabular-nums"
-                value={amount}
-                onChange={(event) => setAmount(Number(event.target.value.replace(/\D/g, "")) || 0)}
-              />
-              <button
-                type="button"
-                aria-label="Un de plus"
-                onClick={() => setAmount((n) => n + 1)}
-                className="h-10 w-10 cursor-pointer border border-line bg-panel2 text-[20px] text-gold-light hover:text-cream"
-              >
-                +
-              </button>
-            </div>
-            <div className="text-right text-[20px] text-muted tabular-nums">
-              {before}
-              <span className="mx-2 text-gold">→</span>
-              <span className={after < 0 ? "text-alert" : "text-cream"}>{after}</span>
-            </div>
-          </div>
+        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border border-line bg-panel2 px-6 py-4 tabular-nums">
+          <span className="lbl">Après</span>
+          <span className="text-[34px] text-muted">{before}</span>
+          <span className="text-[28px] text-gold">→</span>
+          <span className={`text-[44px] leading-none ${after < 0 ? "text-alert" : "text-cream"}`}>{after}</span>
+          <span className="text-[18px] text-faint">en stock</span>
+        </div>
 
-          {error && <div className="text-[15px] text-alert">{error}</div>}
-          {after < 0 && <div className="text-[15px] text-alert">Il n'y en a que {before} en stock.</div>}
+        <div className="flex flex-wrap gap-6">
+          <label className="flex flex-col gap-2.5">
+            <span className="lbl">Quantité</span>
+            <input
+              autoFocus
+              inputMode="numeric"
+              aria-label="Quantité"
+              className="h-14 w-[150px] border border-gold bg-ink text-center text-[30px] text-cream tabular-nums outline-none focus:border-gold-light"
+              value={quantity}
+              onFocus={(event) => event.target.select()}
+              onChange={(event) => setQuantity(event.target.value.replace(/\D/g, "").slice(0, 6))}
+            />
+          </label>
+          <label className="flex min-w-[200px] flex-1 flex-col gap-2.5">
+            <span className="lbl">Raison</span>
+            <select className="field h-14! text-[20px]!" value={reason} onChange={(event) => setReason(event.target.value)}>
+              {REASONS[action].map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
 
-          <button type="submit" className="btn-primary" disabled={invalid || busy}>
+        {error && <div className="text-[16px] text-alert">{error}</div>}
+        {after < 0 && <div className="text-[16px] text-alert">Il n'y en a que {before} en stock.</div>}
+
+        <div className="flex flex-wrap justify-end gap-3.5">
+          <button type="button" className="btn-ghost h-[58px]! px-7!" onClick={closeAdjust}>
+            Annuler
+          </button>
+          <button type="submit" className="btn-primary h-[58px]! px-10!" disabled={invalid || busy}>
             {busy ? "Enregistrement…" : "Confirmer"}
           </button>
-        </form>
-      </aside>
-    </>
+        </div>
+      </form>
+    </div>
   );
 }
