@@ -141,9 +141,9 @@ export default function AjusterPanel() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-6">
+        <div className="mt-3 flex flex-wrap gap-6">
           <div className="flex flex-col gap-2.5">
-            <span className="lbl">Quantité</span>
+            <span className="lbl text-[14px]!">Quantité</span>
             <div className="flex items-stretch" role="group" aria-label="Quantité">
               <button
                 type="button"
@@ -173,7 +173,7 @@ export default function AjusterPanel() {
             </div>
           </div>
           <label className="flex min-w-[200px] flex-1 flex-col gap-2.5">
-            <span className="lbl">Raison</span>
+            <span className="lbl text-[14px]!">Raison</span>
             <select className="field h-14! text-[20px]!" value={reason} onChange={(event) => setReason(event.target.value)}>
               {REASONS[action].map((r) => (
                 <option key={r} value={r}>
