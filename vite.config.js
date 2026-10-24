@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     port: 5180,
-    // Les appels /api vont au serveur local lecture seule (server/index.js).
+    // Les appels /api vont au serveur local (server/index.js).
     proxy: { "/api": "http://127.0.0.1:5181" },
   },
 });

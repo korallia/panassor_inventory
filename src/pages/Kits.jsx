@@ -16,11 +16,12 @@ import {
   SampleNote,
   Stepper,
 } from "../components/ui.jsx";
+import { StockControl } from "../components/Ajuster.jsx";
 
 export default function Kits() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { kits, collections, productsById, dispatch, readOnly } = useInventory();
+  const { kits, collections, productsById, dispatch } = useInventory();
   const kit = kits.find((k) => k.id === id) ?? kits[0];
   const collection = collections.find((c) => c.id === kit.collectionId);
 
@@ -95,7 +96,7 @@ export default function Kits() {
 
           <div className="mt-6 flex items-baseline justify-between gap-3 border-t border-gold/60 pt-5">
             <div className="sc text-[16px] tracking-[.16em] text-gold">Étuis de cuir</div>
-            <div className="text-[15px] text-faint">fixent les kits visés</div>
+            <div className="sub">fixent les kits visés</div>
           </div>
           {kit.leather.map((leather) => (
             <div key={leather.color} className="flex items-center justify-between gap-4 border-t border-line/35 py-3">
@@ -103,13 +104,14 @@ export default function Kits() {
                 <span className="h-7 w-7 shrink-0 border border-line" style={{ background: leather.swatch }} />
                 <span className="text-[19px] text-cream">{leather.color}</span>
               </span>
-              <Stepper
-                small
-                label={`Étuis ${leather.color}`}
-                disabled={readOnly}
-                value={leather.stock}
-                onChange={(value) => dispatch({ type: "setLeather", kitId: kit.id, color: leather.color, value })}
-              />
+              <StockControl stockId={leather.stockId} value={leather.stock} label={`Étuis ${leather.color}`}>
+                <Stepper
+                  small
+                  label={`Étuis ${leather.color}`}
+                  value={leather.stock}
+                  onChange={(value) => dispatch({ type: "setLeather", kitId: kit.id, color: leather.color, value })}
+                />
+              </StockControl>
             </div>
           ))}
           <div className="flex w-fit flex-wrap items-baseline gap-x-3 gap-y-1 border border-gold bg-panel2 px-4 py-2.5">

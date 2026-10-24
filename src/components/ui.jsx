@@ -137,7 +137,7 @@ export function GoalGauge({ label, note, have, need, unit }) {
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 sm:grid-cols-[190px_minmax(0,1fr)_120px]">
       <div className="min-w-0">
         <div className="sc text-[15px] tracking-[.16em] text-gold">{label}</div>
-        {note && <div className="text-[15px] text-faint">{note}</div>}
+        {note && <div className="sub mt-1">{note}</div>}
       </div>
       <div className="order-last col-span-2 flex h-[34px] w-full bg-track sm:order-none sm:col-span-1">
         {parts.map((part) => (
@@ -153,9 +153,13 @@ export function GoalGauge({ label, note, have, need, unit }) {
       <div className="text-right tabular-nums">
         <div className={`text-[24px] leading-none ${reached ? "text-[#cfe5d2]" : "text-alert-soft"}`}>
           {have} <span className="text-[18px] text-muted2">/ {need}</span>
-          {unit && <span className="ml-1 text-[14px] text-faint">{unit}</span>}
+          {unit && <span className="sub ml-1">{unit}</span>}
         </div>
-        {extra > 0 && need > 0 && <div className="mt-1 text-[13px] text-faint">+{extra} en plus</div>}
+        {extra > 0 && need > 0 && (
+          <div className="sub mt-1">
+            <span className="sub-num ml-0">+{extra}</span> en plus
+          </div>
+        )}
       </div>
     </div>
   );
@@ -220,7 +224,7 @@ export function RatioValue({ have, need, note }) {
         <span className={`text-[26px] ${reached ? "text-[#cfe5d2]" : "text-alert-soft"}`}>{have}</span>
         <span className="text-[17px] text-muted2"> / {need}</span>
       </div>
-      {note && <div className="mt-1 text-[13px] text-faint">{note}</div>}
+      {note && <div className="sub mt-1.5">{note}</div>}
     </div>
   );
 }
@@ -235,11 +239,15 @@ export function GaugeColumn({ label, note, have, need, unit, height = 300 }) {
       <div className="tabular-nums leading-none">
         <span className={`text-[36px] ${reached ? "text-[#cfe5d2]" : "text-alert-soft"}`}>{have}</span>
         <span className="text-[19px] text-muted2"> / {need}</span>
-        {unit && <div className="mt-1 text-[13px] text-faint">{unit}</div>}
+        {unit && <div className="sub mt-1.5">{unit}</div>}
       </div>
       <VerticalBar have={have} need={need} height={height} />
-      <div className="min-h-[36px] text-[14px] leading-snug text-faint">
-        {extra > 0 && need > 0 ? <div className="text-muted2">+{extra} en plus</div> : null}
+      <div className="sub min-h-[36px]">
+        {extra > 0 && need > 0 ? (
+          <div>
+            <span className="sub-num ml-0">+{extra}</span> en plus
+          </div>
+        ) : null}
         {note}
       </div>
     </div>
@@ -253,7 +261,7 @@ export function GaugePanel({ title = "Objectifs", children, footer }) {
       <div className="sc text-center text-[18px] tracking-[.2em] text-gold">{title}</div>
       <div className="grid flex-1 auto-cols-fr grid-flow-col gap-3">{children}</div>
       {footer}
-      <div className="mt-auto flex flex-col gap-1.5 border-t border-line/40 pt-4 text-[14px] text-muted2">
+      <div className="sub mt-auto flex flex-col gap-2 border-t border-line/40 pt-4">
         <span className="flex items-center gap-2">
           <span className="inline-block h-4 w-3" style={GAUGE_STYLES.ok} />
           Objectif atteint
@@ -469,17 +477,17 @@ export function Stepper({ value, onChange, label, small = false, disabled = fals
 }
 
 export function SampleNote() {
-  const { source, environment, loadedAt, error } = useInventory();
+  const { source, loadedAt, error } = useInventory();
   if (error) return <div className="text-[14px] text-alert">Lecture des vraies données impossible : {error}. Données d'exemple affichées.</div>;
   if (source === "live") {
     const time = loadedAt ? new Date(loadedAt).toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" }) : "";
     return (
-      <div className="text-[14px] text-faint">
-        Vraies données · lecture seule · Square {environment === "production" ? "production" : "sandbox"} · lues à {time}
+      <div className="sub">
+        Vraies données · stock de la base · lues à <span className="sub-num">{time}</span>
       </div>
     );
   }
-  return <div className="text-[14px] text-faint">Quantités d'exemple : rien n'est relié à la vraie base ni à Square.</div>;
+  return <div className="sub">Quantités d'exemple : rien n'est relié à la vraie base ni à Square.</div>;
 }
 
 /** Libellé lisible d'un type de produit. */

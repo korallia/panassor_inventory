@@ -1,10 +1,10 @@
-// État de l'application, en mémoire seulement : chaque rechargement de la
-// page repart des données d'exemple. Les boutons + / − servent à tester les
-// calculs. Plus tard, ces actions deviendront des appels à l'API.
-import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useState } from "react";
+// État de l'application. Sans serveur : données d'exemple en mémoire, les
+// boutons + / − servent à tester les calculs. Avec les vraies données : le
+// stock se change par le panneau « Ajuster » (appel à l'API, voir stock.js).
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
 import * as sample from "./data/sampleData.js";
-import { computeInventory } from "./lib/inventory.js";
+import { computeInventory, withLeatherMinimums } from "./lib/inventory.js";
 
 const clampStock = (value) => Math.max(0, Math.round(Number(value) || 0));
 
@@ -117,7 +117,8 @@ function reducer(state, action) {
     case "setKitMin":
       return {
         ...state,
-        kits: state.kits.map((kit) => (kit.id === action.kitId ? { ...kit, min: clampStock(action.value) } : kit)),
+        // Les étuis suivent : minimum de kits partagé entre les couleurs (voir withLeatherMinimums).
+        kits: state.kits.map((kit) => (kit.id === action.kitId ? withLeatherMinimums({ ...kit, min: clampStock(action.value) }) : kit)),
       };
     case "addObjective":
       return { ...state, objectives: [action.objective, ...state.objectives] };
@@ -170,7 +171,6 @@ function reducer(state, action) {
         catalog: action.data.catalog,
         objectives: [],
         source: "live",
-        environment: action.data.environment,
         loadedAt: action.data.loadedAt,
         user: action.data.user || null,
       };
@@ -242,6 +242,72 @@ export function InventoryProvider({ children }) {
     [reload]
   );
 
+  // Panneau « Ajuster » : l'id de la ligne de stock ouverte (null = fermé).
+  const [adjusting, setAdjusting] = useState(null);
+  const openAdjust = useCallback((stockId) => setAdjusting(stockId), []);
+  const closeAdjust = useCallback(() => setAdjusting(null), []);
+
+  // Retrouve une ligne de stock (pièce, sorte d'aiguille ou étui) par son id.
+  const findStockLine = useCallback(
+    (stockId) => {
+      const collectionName = (id) => state.collections.find((c) => c.id === id)?.name ?? "";
+      for (const product of state.products) {
+        if (product.stockId === stockId) {
+          return { name: product.name, detail: collectionName(product.collectionId), stock: product.stock };
+        }
+        for (const type of product.packTypes || []) {
+          if (type.stockId === stockId) {
+            return { name: `${product.name} · ${type.name.toLowerCase()}`, detail: collectionName(product.collectionId), stock: type.stock };
+          }
+        }
+      }
+      for (const kit of state.kits) {
+        for (const leather of kit.leather) {
+          if (leather.stockId === stockId) {
+            return { name: `Étui ${leather.color.toLowerCase()}`, detail: kit.name, stock: leather.stock };
+          }
+        }
+      }
+      return null;
+    },
+    [state.collections, state.products, state.kits]
+  );
+
+  // Ajoute ou retire du stock, puis relit les données (le chiffre change partout).
+  const adjustStock = useCallback(
+    async (stockId, payload) => {
+      const response = await fetch(`/api/stock/${stockId}/ajuster`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }).catch(() => null);
+      const body = await response?.json().catch(() => ({}));
+      if (!response?.ok) return { ok: false, error: body?.error || "Enregistrement impossible." };
+      await reload();
+      return { ok: true, ...body };
+    },
+    [reload]
+  );
+
+  // Minimums (vraies données) : enregistrés en base, 400 ms après le dernier clic,
+  // pour ne pas envoyer une requête à chaque − / +.
+  const minimumTimers = useRef({});
+  const saveMinimum = useCallback(({ productId, variantId = null, minimum }) => {
+    const key = `${productId}:${variantId ?? ""}`;
+    clearTimeout(minimumTimers.current[key]);
+    minimumTimers.current[key] = setTimeout(() => {
+      fetch("/api/minimum", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId: Number(productId), variantId: variantId == null ? null : Number(variantId), minimum }),
+      })
+        .then((response) => {
+          if (!response.ok) setError("Minimum non enregistré.");
+        })
+        .catch(() => setError("Minimum non enregistré."));
+    }, 400);
+  }, []);
+
   const logout = useCallback(async () => {
     await fetch("/api/logout", { method: "POST" }).catch(() => {});
     setStatus("connexion");
@@ -250,8 +316,25 @@ export function InventoryProvider({ children }) {
   // Recalcule l'inventaire seulement quand les produits ou les kits changent (pas à chaque frappe dans le catalogue).
   const computed = useMemo(() => computeInventory({ products: state.products, kits: state.kits }), [state.products, state.kits]);
   const value = useMemo(
-    () => ({ ...state, ...computed, dispatch, status, error, requestCode, verifyCode, logout, reload, readOnly: state.source === "live" }),
-    [state, computed, status, error, requestCode, verifyCode, logout, reload]
+    () => ({
+      ...state,
+      ...computed,
+      dispatch,
+      status,
+      error,
+      requestCode,
+      verifyCode,
+      logout,
+      reload,
+      readOnly: state.source === "live",
+      adjusting,
+      openAdjust,
+      closeAdjust,
+      findStockLine,
+      adjustStock,
+      saveMinimum,
+    }),
+    [state, computed, status, error, requestCode, verifyCode, logout, reload, adjusting, openAdjust, closeAdjust, findStockLine, adjustStock, saveMinimum]
   );
   return <InventoryContext.Provider value={value}>{children}</InventoryContext.Provider>;
 }

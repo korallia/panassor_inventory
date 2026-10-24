@@ -1,5 +1,5 @@
 {
-  "_note": "Ce que la base du site ne décrit pas encore. Les produits sont repérés par leur slug_fr. Les ensembles passent à la base dès qu'ils ont leurs lignes dans kit_components.",
+  "_note": "Ce que la base du site ne décrit pas encore. Les produits sont repérés par leur slug_fr. Les ensembles passent à la base dès qu'ils ont leurs lignes dans kit_components. Les paquets (aiguilles) viennent de la base depuis la migration 014.",
   "ensembles": {
     "crochet-et-tourne-serrure-voleur": {
       "components": [
@@ -26,23 +26,6 @@
         }
       ],
       "objective": 0
-    }
-  },
-  "paquets": {
-    "aiguilles-suture": {
-      "_note": "Square compte les paquets complets. orphelines = aiguilles seules en surplus.",
-      "types": [
-        {
-          "id": "droite",
-          "name": "Droites",
-          "orphelines": 0
-        },
-        {
-          "id": "courbe",
-          "name": "Courbes",
-          "orphelines": 0
-        }
-      ]
     }
   }
 }

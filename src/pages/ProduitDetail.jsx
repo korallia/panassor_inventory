@@ -2,7 +2,7 @@
 //   1C     outil / pièce
 //   1D(1)  paquet (aiguilles de suture)
 //   1D(2)  ensemble (ex. Crochet + tourne-serrure)
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { useInventory } from "../store.jsx";
 import {
@@ -73,9 +73,47 @@ function kitsNote(kitsUsing) {
   return `pour ${names.join(" + ")}`;
 }
 
+/** Sous-titre gris (classe .sub de index.css) et chiffre dans un sous-titre (.sub-num). */
+const smallText = "sub";
+function Num({ children }) {
+  return <span className="sub-num">{children}</span>;
+}
+
+/**
+ * Rangée de boîtes chiffrées (chiffre, titre, précision). Une boîte avec un
+ * stockId ouvre la fenêtre Ajuster de cette ligne de stock (vraies données).
+ */
+function StockBoxes({ boxes }) {
+  const { source, openAdjust } = useInventory();
+  return (
+    <div className="mt-1 grid gap-2.5" style={{ gridTemplateColumns: `repeat(${boxes.length}, minmax(0, 1fr))` }}>
+      {boxes.map((box) => {
+        const onClick = source === "live" && box.stockId ? () => openAdjust(box.stockId) : null;
+        const Box = onClick ? "button" : "div";
+        return (
+          <Box
+            key={box.label}
+            type={onClick ? "button" : undefined}
+            onClick={onClick || undefined}
+            title={onClick ? "Ajuster le stock" : undefined}
+            className={`flex flex-col items-center border border-gold/45 bg-panel2 px-2 pt-4 pb-4 text-center ${
+              onClick ? "cursor-pointer transition-colors hover:border-gold hover:bg-gold/8" : ""
+            }`}
+          >
+            <span className="text-[28px] leading-none text-cream tabular-nums">{box.value}</span>
+            {/* Titre et précision dans la même police (petites capitales), seule la couleur change. */}
+            <span className="sc mt-3 text-[14px] leading-tight tracking-[.18em] text-gold">{box.label}</span>
+            <span className="sub mt-2">{box.note}</span>
+          </Box>
+        );
+      })}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------- 1C
 function PieceDetail({ product, collectionName }) {
-  const { readOnly, reserved, dispatch } = useInventory();
+  const { source, reserved, dispatch } = useInventory();
   const state = productState(product, reserved);
   const kitsUsing = useKitsUsing(product.id);
   const toReserve = reservedTarget(product.id, kitsUsing);
@@ -101,21 +139,27 @@ function PieceDetail({ product, collectionName }) {
         <section className="flex flex-col gap-2 border border-line/50 bg-panel/60 px-6 py-5">
           <div className="flex flex-wrap items-baseline justify-between gap-3">
             <div className="sc text-[16px] tracking-[.16em] text-gold">Pièces en stock</div>
-            <div className="text-[15px] text-faint">Objectif : {total.note} = {total.need}</div>
+            {/* Petites capitales comme « pour les kits », chiffres en Garamond, un ton plus clair, pour bien les lire. */}
+            <div className={smallText}>
+              Objectif : <Num>{toReserve}</Num> réservés + <Num>{state.min}</Num> libres = <Num>{total.need}</Num>
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-4 border-t border-line/35 py-3">
             <div className="w-[130px]">
               <div className="text-[21px] text-cream">{product.name}</div>
-              <div className="mt-2">
-                <Stepper
-                  small
-                  label={`Stock ${product.name}`}
-                    disabled={readOnly}
-                  value={product.stock}
-                  onChange={(value) => dispatch({ type: "setStock", productId: product.id, value })}
-                />
-              </div>
+              {/* Données d'exemple seulement : − / + pour tester. Avec les vraies données,
+                  le stock se change par la fenêtre Ajuster (point d'entrée à placer). */}
+              {source !== "live" && (
+                <div className="mt-2">
+                  <Stepper
+                    small
+                    label={`Stock ${product.name}`}
+                    value={product.stock}
+                    onChange={(value) => dispatch({ type: "setStock", productId: product.id, value })}
+                  />
+                </div>
+              )}
             </div>
             <div className="order-last w-full min-w-0 sm:order-none sm:w-auto sm:flex-1">
               <RowGauge have={state.stock} need={total.need} />
@@ -125,13 +169,15 @@ function PieceDetail({ product, collectionName }) {
             </div>
           </div>
 
-          <div className="mb-1.5 text-[15px] text-faint">
-            {state.reserved} réservés pour les kits + {state.free} libres pour la vente.
-          </div>
-          <div className="flex w-fit flex-wrap items-baseline gap-x-3 gap-y-1 border border-gold bg-panel2 px-4 py-2.5">
-            <span className="text-[30px] leading-none text-cream">{state.stock}</span>
-            <span className="text-[17px] text-muted">en stock</span>
-          </div>
+          {/* Les trois ouvrent la même fenêtre Ajuster : on ajoute ou retire du stock,
+              et l'atelier calcule lui-même ce qui va aux kits et ce qui reste en vente. */}
+          <StockBoxes
+            boxes={[
+              { label: "Réservés", note: "pour les kits", value: state.reserved, stockId: product.stockId },
+              { label: "Libres", note: "pour la vente", value: state.free, stockId: product.stockId },
+              { label: "Total", note: "en stock", value: state.stock, stockId: product.stockId },
+            ]}
+          />
         </section>
       </DetailLayout>
     </div>
@@ -140,7 +186,7 @@ function PieceDetail({ product, collectionName }) {
 
 // ---------------------------------------------------------------- 1D(1)
 function PackDetail({ product, collectionName }) {
-  const { readOnly, reserved, dispatch } = useInventory();
+  const { source, reserved, dispatch } = useInventory();
   const state = productState(product, reserved);
   const kitsUsing = useKitsUsing(product.id);
   const orphans = packOrphans(product);
@@ -149,9 +195,8 @@ function PackDetail({ product, collectionName }) {
   const total = totalTarget(toReserve, state.min);
   const missing = Math.max(0, toReserve - state.reserved) + state.missingForMin;
   const low = state.status !== "ok" || missing > 0;
-  const plural = (n) => (n === 1 ? "paquet" : "paquets");
+  const plural = (n) => (n === 1 ? "Paquet" : "Paquets");
   const rowScale = Math.max(...product.packTypes.map((type, i) => type.stock + missingByType[i].missing));
-  const composition = product.packTypes.map((type) => `1 ${type.name.toLowerCase().replace(/s$/, "")}`).join(" + ");
 
   return (
     <div className="flex flex-col gap-8">
@@ -162,7 +207,7 @@ function PackDetail({ product, collectionName }) {
 
       <DetailLayout
         aside={
-          <GaugePanel footer={<div className="text-center text-[14px] text-faint">En paquets de {product.packTypes.length}.</div>}>
+          <GaugePanel footer={<div className="sub text-center">En paquets de <Num>{product.packTypes.length}</Num></div>}>
             {toReserve > 0 && (
               <GaugeColumn label="Réservés" note={kitsNote(kitsUsing)} have={state.reserved} need={toReserve} unit="paquets" />
             )}
@@ -174,8 +219,8 @@ function PackDetail({ product, collectionName }) {
       <section className="flex flex-col gap-2 border border-line/50 bg-panel/60 px-6 py-5">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <div className="sc text-[16px] tracking-[.16em] text-gold">Pièces en stock</div>
-          <div className="text-[15px] text-faint">
-            Objectif par type : {total.note} = {total.need}
+          <div className="sub">
+            Objectif par type : <Num>{toReserve}</Num> réservés + <Num>{state.min}</Num> libres = <Num>{total.need}</Num>
           </div>
         </div>
 
@@ -186,15 +231,18 @@ function PackDetail({ product, collectionName }) {
             <div key={type.id} className="flex flex-wrap items-center gap-4 border-t border-line/35 py-3">
               <div className="w-[130px]">
                 <div className="text-[21px] text-cream">{type.name}</div>
-                <div className="mt-2">
-                  <Stepper
-                    small
-                    label={`Stock ${type.name}`}
-                    disabled={readOnly}
-                    value={type.stock}
-                    onChange={(value) => dispatch({ type: "setPackStock", productId: product.id, typeId: type.id, value })}
-                  />
-                </div>
+                {/* Données d'exemple seulement : − / + pour tester. Avec les vraies données,
+                    on ajuste par les boîtes en bas. */}
+                {source !== "live" && (
+                  <div className="mt-2">
+                    <Stepper
+                      small
+                      label={`Stock ${type.name}`}
+                      value={type.stock}
+                      onChange={(value) => dispatch({ type: "setPackStock", productId: product.id, typeId: type.id, value })}
+                    />
+                  </div>
+                )}
               </div>
               <div className="order-last w-full min-w-0 sm:order-none sm:w-auto sm:flex-1">
                 <RowGauge have={type.stock} need={need} />
@@ -206,29 +254,18 @@ function PackDetail({ product, collectionName }) {
           );
         })}
 
-        <div className="mb-1.5 text-[15px] text-faint">
-          Un paquet = {composition}.
-          {orphans.some((o) => o.orphans > 0) && (
-            <>
-              {" "}
-              Les pièces orphelines ne comptent pas dans le stock tant qu'il leur manque leur paire.
-            </>
-          )}
-        </div>
-        <div className="flex w-fit flex-wrap items-baseline gap-x-3 gap-y-1 border border-gold bg-panel2 px-4 py-2.5">
-          <span className="text-[30px] leading-none text-cream">{state.stock}</span>
-          <span className="text-[17px] text-muted">{plural(state.stock)}</span>
-          {orphans
-            .filter((o) => o.orphans > 0)
-            .map((o) => (
-              <span key={o.id} className="flex items-baseline gap-2 border-l border-line pl-3">
-                <span className="text-[22px] leading-none text-muted2">+ {o.orphans}</span>
-                <span className="text-[16px] text-faint">
-                  {o.orphans === 1 ? "orpheline" : "orphelines"} ({o.name.toLowerCase().replace(/s$/, "")})
-                </span>
-              </span>
-            ))}
-        </div>
+        {/* Trois boîtes : paquets complets, puis chaque sorte (qui ouvre sa fenêtre Ajuster). */}
+        <StockBoxes
+          boxes={[
+            { label: plural(state.stock), note: "complets", value: state.stock },
+            ...product.packTypes.map((type, index) => ({
+              label: type.name,
+              note: orphans[index].orphans > 0 ? `dont ${orphans[index].orphans} ${orphans[index].orphans === 1 ? "seule" : "seules"}` : "en stock",
+              value: type.stock,
+              stockId: type.stockId,
+            })),
+          ]}
+        />
       </section>
       </DetailLayout>
       <SampleNote />
@@ -239,6 +276,7 @@ function PackDetail({ product, collectionName }) {
 // ---------------------------------------------------------------- 1D(2)
 function EnsembleDetail({ product, collectionName }) {
   const { productsById, reserved } = useInventory();
+  const navigate = useNavigate();
   const state = ensembleState(product, productsById, reserved);
   const plural = (n) => (n === 1 ? "ensemble" : "ensembles");
   const missing = state.parts.filter((part) => part.missing > 0);
@@ -251,7 +289,7 @@ function EnsembleDetail({ product, collectionName }) {
         aside={
           <GaugePanel
             footer={
-              <div className="text-center text-[18px] text-gold-light">
+              <div className={`text-center ${smallText}`}>
                 {missing.length
                   ? `Manque : ${missing.map((part) => `${part.missing} ${part.product.name.toLowerCase()}`).join(" · ")}`
                   : state.objective > 0
@@ -262,7 +300,7 @@ function EnsembleDetail({ product, collectionName }) {
           >
             <GaugeColumn
               label="Ensembles"
-              note="avec le stock libre · rien n'est réservé"
+              note="faisables avec les pièces libres"
               have={state.possible}
               need={state.objective}
               unit={plural(state.objective)}
@@ -273,8 +311,8 @@ function EnsembleDetail({ product, collectionName }) {
         <section className="flex flex-col gap-2 border border-line/50 bg-panel/60 px-6 py-5">
           <div className="flex flex-wrap items-baseline justify-between gap-3">
             <div className="sc text-[16px] tracking-[.16em] text-gold">Pièces de l'ensemble</div>
-            <div className="text-[15px] text-faint">
-              Objectif : {state.objective} {plural(state.objective)}, sur le stock libre
+            <div className={smallText}>
+              Objectif : <Num>{state.objective}</Num> {plural(state.objective)}
             </div>
           </div>
 
@@ -282,29 +320,47 @@ function EnsembleDetail({ product, collectionName }) {
             const need = state.objective * part.qty;
             const extra = part.free - need;
             return (
-              <div key={part.product.id} className="flex flex-wrap items-center gap-4 border-t border-line/35 py-4">
+              <div
+                key={part.product.id}
+                role="link"
+                tabIndex={0}
+                title={`Ouvrir ${part.product.name}`}
+                onClick={() => navigate(`/produits/${part.product.id}`)}
+                onKeyDown={(event) => event.key === "Enter" && navigate(`/produits/${part.product.id}`)}
+                className="-mx-3 flex cursor-pointer flex-wrap items-center gap-4 border-t border-line/35 px-3 py-4 hover:bg-gold/8"
+              >
                 <div className="w-[160px]">
-                  <Link to={`/produits/${part.product.id}`} className="text-[21px] text-cream!">
-                    {part.product.name}
-                  </Link>
-                  <div className="mt-1 text-[14px] leading-snug text-faint">
-                    {part.stock} en stock
-                    {part.reserved > 0 && ` · ${part.reserved} réservés kits, non comptés`}
+                  <div className="text-[21px] text-cream">{part.product.name}</div>
+                  <div className={`mt-1.5 ${smallText}`}>
+                    <Num>{part.stock}</Num> en stock
+                    {part.reserved > 0 && (
+                      <>
+                        {" "}
+                        · <Num>{part.reserved}</Num> aux kits
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="order-last w-full min-w-0 sm:order-none sm:w-auto sm:flex-1">
                   <RowGauge have={Math.max(0, part.free)} need={need} />
                 </div>
                 <div className="ml-auto w-[120px]">
-                  <RatioValue have={part.free} need={need} note={need > 0 && extra > 0 ? `+${extra} vendables seuls` : null} />
+                  <RatioValue
+                    have={part.free}
+                    need={need}
+                    note={
+                      need > 0 && extra > 0 ? (
+                        <span className={smallText}>
+                          <Num>+{extra}</Num> en surplus
+                        </span>
+                      ) : null
+                    }
+                  />
                 </div>
               </div>
             );
           })}
 
-          <div className="border-t border-line/35 pt-3 text-[15px] text-faint">
-            Libres = stock − réservés pour les kits. Seules les pièces libres servent aux ensembles.
-          </div>
         </section>
       </DetailLayout>
       <SampleNote />

@@ -1,8 +1,7 @@
-// Application de l'atelier (routes /api) — LECTURE SEULE.
-//   - lit la base Postgres du site (produits, images, kits, couleurs)
-//   - lit le stock dans Square (inventaire)
-//   - n'écrit NULLE PART : chaque requête Postgres est en lecture seule
-//     et on n'appelle que des routes Square de lecture.
+// Application de l'atelier (routes /api).
+//   - lit la base Postgres du site (produits, images, kits, couleurs, stock)
+//   - écrit seulement le stock (+ son historique), les minimums et le compte connecté.
+//     Square n'est plus appelé : le stock vit dans la base (migration 014).
 // Utilisée en local par server/index.js et en ligne par api/index.js (Vercel).
 import express from "express";
 
@@ -18,6 +17,8 @@ import {
 } from "./auth.js";
 import { loadAtelierData } from "./data.js";
 import { imageRoute } from "./images.js";
+import { adjustStock, listMovements } from "./stock.js";
+import { setMinimum } from "./minimums.js";
 
 const app = express();
 app.use(express.json());
@@ -57,5 +58,11 @@ app.get("/api/data", requireAuth, async (req, res) => {
 });
 
 app.get("/api/img", requireAuth, imageRoute);
+
+// Stock (connecté seulement) : ajouter ou retirer des pièces (avec raison et note),
+// historique des mouvements, minimums.
+app.post("/api/stock/:id/ajuster", requireAuth, safe(adjustStock));
+app.get("/api/mouvements", requireAuth, safe(listMovements));
+app.put("/api/minimum", requireAuth, safe(setMinimum));
 
 export default app;
