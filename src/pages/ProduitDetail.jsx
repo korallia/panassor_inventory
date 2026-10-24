@@ -86,7 +86,7 @@ function Num({ children }) {
 function StockBoxes({ boxes }) {
   const { source, openAdjust } = useInventory();
   return (
-    <div className="mt-1 grid gap-2.5" style={{ gridTemplateColumns: `repeat(${boxes.length}, minmax(0, 1fr))` }}>
+    <div className="mt-5 grid gap-2.5 border-t border-line/35 pt-6" style={{ gridTemplateColumns: `repeat(${boxes.length}, minmax(0, 1fr))` }}>
       {boxes.map((box) => {
         const onClick = source === "live" && box.stockId ? () => openAdjust(box.stockId) : null;
         const Box = onClick ? "button" : "div";
@@ -129,7 +129,7 @@ function PieceDetail({ product, collectionName }) {
 
       <DetailLayout
         aside={
-          <GaugePanel>
+          <GaugePanel legend={false}>
             {toReserve > 0 && <GaugeColumn label="Réservés" note={kitsNote(kitsUsing)} have={state.reserved} need={toReserve} />}
             <GaugeColumn label="Libres" note="minimum pour la vente" have={state.free} need={state.min} />
             <GaugeColumn label="Total" note={total.note} have={state.stock} need={total.need} />
@@ -207,7 +207,7 @@ function PackDetail({ product, collectionName }) {
 
       <DetailLayout
         aside={
-          <GaugePanel footer={<div className="sub text-center">En paquets de <Num>{product.packTypes.length}</Num></div>}>
+          <GaugePanel legend={false} footer={<div className="sub text-center">En paquets de <Num>{product.packTypes.length}</Num></div>}>
             {toReserve > 0 && (
               <GaugeColumn label="Réservés" note={kitsNote(kitsUsing)} have={state.reserved} need={toReserve} unit="paquets" />
             )}
@@ -287,7 +287,7 @@ function EnsembleDetail({ product, collectionName }) {
 
       <DetailLayout
         aside={
-          <GaugePanel
+          <GaugePanel legend={false}
             footer={
               <div className={`text-center ${smallText}`}>
                 {missing.length

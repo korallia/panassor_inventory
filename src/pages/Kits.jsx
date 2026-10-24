@@ -9,7 +9,7 @@ import { useInventory } from "../store.jsx";
 import { kitsReady, leatherTotal, productStock } from "../lib/inventory.js";
 import {
   GaugeColumn,
-  GaugeKey,
+  PageLegend,
   GaugePanel,
   PageHeader,
   RatioValue,
@@ -61,12 +61,7 @@ export default function Kits() {
       </PageHeader>
 
       <div className="grid w-full items-stretch justify-center gap-8 lg:grid-cols-[minmax(0,620px)_minmax(0,480px)] lg:gap-12 3xl:grid-cols-[minmax(230px,1fr)_minmax(0,620px)_minmax(0,480px)_minmax(0,1fr)]">
-        {/* Légende : vaut pour toute la page, dans le vide à gauche sur grand écran (en bas sinon). */}
-        <div className="order-3 min-w-0 lg:col-span-2 3xl:order-none 3xl:col-span-1 3xl:sticky 3xl:top-14 3xl:self-start 3xl:pt-6">
-          <div className="w-fit border border-line/70 bg-panel px-5 py-4">
-            <GaugeKey />
-          </div>
-        </div>
+        <PageLegend />
         <div className="order-2 min-w-0 lg:order-1">
         {/* Composants */}
         <section className="flex h-full flex-col gap-2 border border-line/50 bg-panel/60 px-6 py-5">
