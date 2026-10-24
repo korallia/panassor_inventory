@@ -11,11 +11,33 @@ import { PageHeader, SampleNote, StatusPill, typeLabel, unitFor } from "../compo
 const STATUS_RANK = { out: 0, low: 1, ok: 2 };
 
 const SORTS = {
-  dispo: { label: "Trier : disponible (bas → haut)", fn: (a, b) => a.free - b.free || a.name.localeCompare(b.name, "fr") },
+  dispo: { label: "Trier : disponible (bas → haut)", fn: (a, b) => a.free - b.free },
   nom: { label: "Trier : nom", fn: (a, b) => a.name.localeCompare(b.name, "fr") },
   reserve: { label: "Trier : réservé (haut → bas)", fn: (a, b) => (b.reserved ?? -1) - (a.reserved ?? -1) },
   etat: { label: "Trier : état (rupture d'abord)", fn: (a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status] || a.free - b.free },
 };
+
+// Flèches par colonne : la valeur comparée pour chaque colonne.
+// Les cases vides (« — ») vont toujours à la fin.
+const COLUMNS = [
+  { key: "name", label: "Produit", value: (row) => row.name },
+  { key: "type", label: "Type", value: (row) => (row.isKit ? "Kit complet" : typeLabel(row.product, row.inKit)) },
+  { key: "free", label: "Disponible", num: true, value: (row) => row.free },
+  { key: "reserved", label: "Réservé", num: true, value: (row) => row.reserved },
+  { key: "total", label: "Total", num: true, value: (row) => row.total },
+  { key: "min", label: "Min.", num: true, value: (row) => row.min },
+  { key: "status", label: "État", value: (row) => STATUS_RANK[row.status] },
+];
+
+function compareColumn(column, dir) {
+  return (a, b) => {
+    const x = column.value(a);
+    const y = column.value(b);
+    if (x == null || y == null) return x == null ? (y == null ? 0 : 1) : -1;
+    const diff = typeof x === "string" ? x.localeCompare(y, "fr") : x - y;
+    return dir === "desc" ? -diff : diff;
+  };
+}
 
 function useRegister() {
   const { collections, products, kits, productsById, reserved } = useInventory();
@@ -50,7 +72,7 @@ function useRegister() {
 
     const kitRows = kits.map((kit) => {
       const ready = kitsReady(kit, productsById);
-      return { kit, ready, status: stockStatus(ready, kit.min), isKit: true, name: kit.name, free: ready, reserved: null };
+      return { kit, ready, status: stockStatus(ready, kit.min), isKit: true, name: kit.name, free: ready, reserved: null, total: null, min: kit.min };
     });
 
     return { collections, rows, kitRows };
@@ -62,6 +84,21 @@ export default function Inventaire() {
   const [collectionId, setCollectionId] = useState("all");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState("dispo");
+  const [column, setColumn] = useState(null); // { key, dir } quand on clique une flèche
+
+  // Clic sur une colonne : ascendant, puis descendant, puis ascendant…
+  const clickColumn = (key) =>
+    setColumn((current) => ({ key, dir: current?.key === key && current.dir === "asc" ? "desc" : "asc" }));
+
+  // En cas d'égalité : par collection, le kit d'abord, puis ses pièces par nom.
+  const collectionRank = Object.fromEntries(collections.map((c, index) => [c.id, index]));
+  const byPlace = (a, b) =>
+    (collectionRank[(a.kit ?? a.product).collectionId] ?? 99) - (collectionRank[(b.kit ?? b.product).collectionId] ?? 99) ||
+    (b.isKit ? 1 : 0) - (a.isKit ? 1 : 0) ||
+    a.name.localeCompare(b.name, "fr");
+  const active = column && COLUMNS.find((c) => c.key === column.key);
+  const order = active ? compareColumn(active, column.dir) : SORTS[sort].fn;
+  const compare = (a, b) => order(a, b) || byPlace(a, b);
 
   const visibleCollections = collections.filter((c) => collectionId === "all" || c.id === collectionId);
   const needle = query.trim().toLowerCase();
@@ -69,13 +106,13 @@ export default function Inventaire() {
 
   // Tri par nom : on garde les collections, le kit sert de séparateur.
   // Les autres tris sont globaux : une seule liste, toutes collections mêlées.
-  const grouped = sort === "nom";
+  const grouped = !active && sort === "nom";
   const collectionNames = Object.fromEntries(collections.map((c) => [c.id, c.name]));
   const groups = grouped
     ? visibleCollections.map((collection) => ({
         collection,
         kits: kitRows.filter((row) => row.kit.collectionId === collection.id && matches(row.kit.name)),
-        rows: rows.filter((row) => row.product.collectionId === collection.id && matches(row.name)).sort(SORTS[sort].fn),
+        rows: rows.filter((row) => row.product.collectionId === collection.id && matches(row.name)).sort(compare),
       }))
     : [
         {
@@ -83,7 +120,7 @@ export default function Inventaire() {
           kits: [],
           rows: [...kitRows, ...rows]
             .filter((row) => visibleCollections.some((c) => c.id === (row.kit ?? row.product).collectionId) && matches(row.name))
-            .sort(SORTS[sort].fn),
+            .sort(compare),
           collectionNames,
         },
       ];
@@ -124,7 +161,10 @@ export default function Inventaire() {
               aria-label="Trier"
               className="field w-auto! bg-panel2! text-gold-light!"
               value={sort}
-              onChange={(event) => setSort(event.target.value)}
+              onChange={(event) => {
+                setSort(event.target.value);
+                setColumn(null);
+              }}
             >
               {Object.entries(SORTS).map(([key, value]) => (
                 <option key={key} value={key}>
@@ -135,25 +175,37 @@ export default function Inventaire() {
           </div>
       </div>
 
-      <RegisterTable groups={groups} />
+      <RegisterTable groups={groups} column={column} onColumn={clickColumn} />
       <SampleNote />
     </div>
   );
 }
 
-function RegisterTable({ groups }) {
+function RegisterTable({ groups, column, onColumn }) {
   return (
     <div className="overflow-x-auto border border-line bg-panel">
       <table className="w-full min-w-[760px] border-collapse">
         <thead>
           <tr>
-            <th className="th">Produit</th>
-            <th className="th">Type</th>
-            <th className="th num">Disponible</th>
-            <th className="th num">Réservé</th>
-            <th className="th num">Total</th>
-            <th className="th num">Min.</th>
-            <th className="th">État</th>
+            {COLUMNS.map((c) => {
+              const on = column?.key === c.key;
+              return (
+                <th key={c.key} className={`th ${c.num ? "num" : ""}`} aria-sort={on ? (column.dir === "asc" ? "ascending" : "descending") : undefined}>
+                  <button
+                    type="button"
+                    onClick={() => onColumn(c.key)}
+                    className={`inline-flex cursor-pointer items-center gap-1.5 border-0 bg-transparent p-0 font-[inherit] tracking-[inherit] uppercase ${
+                      on ? "text-cream" : "text-gold hover:text-gold-light"
+                    }`}
+                  >
+                    {c.label}
+                    <span className={`text-[10px] ${on ? "text-gold" : "text-faint"}`}>
+                      {on ? (column.dir === "asc" ? "▲" : "▼") : "▲▼"}
+                    </span>
+                  </button>
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
