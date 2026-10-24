@@ -158,7 +158,10 @@ export async function loadAtelierData() {
     };
   });
 
-  const kits = kitsRows.map((k) => {
+  // Étuis : minimum enregistré par couleur (réglable à la main ; changer le
+  // minimum de kits le répartit automatiquement, voir la page Minimums).
+  const kits = kitsRows.map((k) => buildKit(k));
+  function buildKit(k) {
     const variants = colorVariantsOf(k.id);
     // Étuis : une ligne par couleur du kit (stock de la variante de couleur).
     const leather = variants.length
@@ -184,7 +187,7 @@ export async function loadAtelierData() {
         })
         .filter((c) => pieceRows.some((p) => id(p.id) === c.productId)),
     };
-  });
+  }
 
   const imagesByProduct = {};
   for (const img of imagesRes.rows) (imagesByProduct[img.product_id] ||= []).push(img);

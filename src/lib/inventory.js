@@ -158,6 +158,31 @@ export function objectiveNeeds(objective, kit, productsById) {
   });
 }
 
+/**
+ * Minimum de kits → minimum d'étuis par couleur : partage égal, et le reste
+ * de la division va sur la première couleur.
+ * Ex. 7 kits, 2 couleurs → [4, 3] ; 4 kits → [2, 2] ; 7 kits, 3 couleurs → [3, 2, 2].
+ */
+export function splitKitMinimum(total, count) {
+  if (count <= 0) return [];
+  const base = Math.floor(total / count);
+  return Array.from({ length: count }, (_, index) => base + (index === 0 ? total - base * count : 0));
+}
+
+/** Le kit avec le minimum de chaque étui réparti à partir du minimum de kits (quand on change ce dernier). */
+export function withLeatherMinimums(kit) {
+  const mins = splitKitMinimum(kit.min ?? 0, kit.leather.length);
+  return { ...kit, leather: kit.leather.map((leather, index) => ({ ...leather, min: mins[index] })) };
+}
+
+/** Minimum « en kit » d'une pièce : minimum de kits × quantité, pour chaque kit qui l'utilise. */
+export function kitMinimumFor(productId, kits) {
+  return kits.reduce(
+    (sum, kit) => sum + (kit.min ?? 0) * kit.components.filter((c) => c.productId === productId).reduce((q, c) => q + c.qty, 0),
+    0
+  );
+}
+
 /** Tout calculer d'un coup pour l'application. */
 export function computeInventory({ products, kits }) {
   const productsById = Object.fromEntries(products.map((product) => [product.id, product]));

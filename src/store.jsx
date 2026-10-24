@@ -4,7 +4,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
 import * as sample from "./data/sampleData.js";
-import { computeInventory } from "./lib/inventory.js";
+import { computeInventory, withLeatherMinimums } from "./lib/inventory.js";
 
 const clampStock = (value) => Math.max(0, Math.round(Number(value) || 0));
 
@@ -117,7 +117,8 @@ function reducer(state, action) {
     case "setKitMin":
       return {
         ...state,
-        kits: state.kits.map((kit) => (kit.id === action.kitId ? { ...kit, min: clampStock(action.value) } : kit)),
+        // Les étuis suivent : minimum de kits partagé entre les couleurs (voir withLeatherMinimums).
+        kits: state.kits.map((kit) => (kit.id === action.kitId ? withLeatherMinimums({ ...kit, min: clampStock(action.value) }) : kit)),
       };
     case "addObjective":
       return { ...state, objectives: [action.objective, ...state.objectives] };
