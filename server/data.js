@@ -53,11 +53,12 @@ export async function loadAtelierData() {
       SELECT pi.product_id, pi.url, pi.alt_fr, pi.alt_en, pi.is_main, pi.sort_order, c.name_fr AS color
       FROM product_images pi LEFT JOIN colors c ON c.id = pi.color_id
       ORDER BY pi.product_id, pi.sort_order`),
-    // Variantes de couleur (étuis des kits).
+    // Variantes de couleur (étuis des kits) et variantes sans couleur, qui servent
+    // seulement au stock (aiguilles : Droite, Courbe, Aiguille — migration 015).
     readOnly(`
-      SELECT pcv.id, pcv.product_id, pcv.price_delta_cents, c.name_fr AS color, c.hex_code
-      FROM product_color_variants pcv JOIN colors c ON c.id = pcv.color_id
-      ORDER BY pcv.product_id, c.name_fr`),
+      SELECT pcv.id, pcv.product_id, pcv.price_delta_cents, pcv.label_fr, c.name_fr AS color, c.hex_code
+      FROM product_variants pcv LEFT JOIN colors c ON c.id = pcv.color_id
+      ORDER BY pcv.product_id, c.name_fr, pcv.id`),
     readOnly(`SELECT kit_product_id, included_product_id, quantity FROM kit_components ORDER BY kit_product_id, sort_order`),
     // Le stock vit dans la base (migration 014) : une ligne par produit, ou par variante.
     readOnly(`SELECT id, product_id, variant_id, quantity FROM stock`),
@@ -65,7 +66,8 @@ export async function loadAtelierData() {
 
   const variantsByProduct = {};
   for (const v of variantsRes.rows) (variantsByProduct[v.product_id] ||= []).push(v);
-  const colorVariantsOf = (productId) => variantsByProduct[productId] || [];
+  const colorVariantsOf = (productId) => (variantsByProduct[productId] || []).filter((v) => v.color);
+  const sortsOf = (productId) => (variantsByProduct[productId] || []).filter((v) => !v.color && v.label_fr);
 
   const stockByProduct = {};
   const stockByVariant = {};
@@ -120,12 +122,28 @@ export async function loadAtelierData() {
           .map((c) => ({ productId: id(bySlug[c.slug].id), qty: c.qty || 1 })),
       };
     }
+    const sorts = sortsOf(p.id);
+    if (sorts.length > 1) {
+      // Paquet (aiguilles de suture) : chaque sorte (Droite, Courbe) a son stock.
+      // Un paquet = 1 de chaque ; le surplus d'une sorte = orphelines.
+      return {
+        id: id(p.id),
+        collectionId: id(p.collection_id),
+        name: p.name_fr,
+        type: "paquet",
+        min: 0,
+        inKit: inAKit.has(id(p.id)),
+        packTypes: sorts.map((v) => ({ id: id(v.id), name: `${v.label_fr}s`, ...line(stockByVariant[v.id]) })),
+      };
+    }
+    // Une seule sorte (aiguilles de douleur) : se compte comme une pièce, sur sa variante.
+    const row = sorts.length === 1 ? stockByVariant[sorts[0].id] : stockByProduct[p.id];
     return {
       id: id(p.id),
       collectionId: id(p.collection_id),
       name: p.name_fr,
       type: p.customizable ? "outil" : "piece",
-      ...line(stockByProduct[p.id]),
+      ...line(row),
       inKit: inAKit.has(id(p.id)),
     };
   });
@@ -159,7 +177,7 @@ export async function loadAtelierData() {
     id: id(p.id),
     collectionId: id(p.collection_id),
     isKit: p.is_kit,
-    type: p.is_kit ? undefined : ensembles[p.slug_fr] ? "ensemble" : p.customizable ? "outil" : "piece",
+    type: p.is_kit ? undefined : ensembles[p.slug_fr] ? "ensemble" : sortsOf(p.id).length > 1 ? "paquet" : p.customizable ? "outil" : "piece",
     nameFr: p.name_fr || "",
     nameEn: p.name_en || "",
     titleFr: p.title_fr || "",
@@ -176,7 +194,7 @@ export async function loadAtelierData() {
       main: img.is_main,
       color: img.color || null, // photo propre à une variante de couleur (product_images.color_id)
     })),
-    // Sous-produits : variantes de couleur (table product_color_variants), avec écart de prix et stock.
+    // Sous-produits : variantes de couleur (table product_variants), avec écart de prix et stock.
     variants: colorVariantsOf(p.id).map((v) => ({
       color: v.color,
       swatch: v.hex_code || "#2a180c",
