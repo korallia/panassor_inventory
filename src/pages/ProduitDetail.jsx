@@ -86,7 +86,10 @@ function Num({ children }) {
 function StockBoxes({ boxes }) {
   const { source, openAdjust } = useInventory();
   return (
-    <div className="mt-5 grid gap-2.5 border-t border-line/35 pt-6" style={{ gridTemplateColumns: `repeat(${boxes.length}, minmax(0, 1fr))` }}>
+    <>
+    {/* Séparateur doré, en dégradé (fondu aux deux bouts). */}
+    <div className="h-px" style={{ background: "linear-gradient(90deg, transparent, var(--color-gold), transparent)" }} />
+    <div className="mt-6 grid gap-2.5" style={{ gridTemplateColumns: `repeat(${boxes.length}, minmax(0, 1fr))` }}>
       {boxes.map((box) => {
         const onClick = source === "live" && box.stockId ? () => openAdjust(box.stockId) : null;
         const Box = onClick ? "button" : "div";
@@ -108,6 +111,7 @@ function StockBoxes({ boxes }) {
         );
       })}
     </div>
+    </>
   );
 }
 
@@ -145,9 +149,9 @@ function PieceDetail({ product, collectionName }) {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-4 border-t border-line/35 py-3">
-            <div className="w-[130px]">
-              <div className="text-[21px] text-cream">{product.name}</div>
+          <div className="flex flex-wrap items-center justify-center gap-x-11 gap-y-4 border-t sm:flex-nowrap border-line/35 pt-7 pb-5">
+            <div>
+              <div className="text-[25px] leading-tight text-cream">{product.name}</div>
               {/* Données d'exemple seulement : − / + pour tester. Avec les vraies données,
                   le stock se change par la fenêtre Ajuster (point d'entrée à placer). */}
               {source !== "live" && (
@@ -161,10 +165,10 @@ function PieceDetail({ product, collectionName }) {
                 </div>
               )}
             </div>
-            <div className="order-last w-full min-w-0 sm:order-none sm:w-auto sm:flex-1">
+            <div className="order-last w-full min-w-0 sm:order-none sm:w-[300px] sm:shrink">
               <RowGauge have={state.stock} need={total.need} />
             </div>
-            <div className="ml-auto w-[100px]">
+            <div>
               <RatioValue have={state.stock} need={total.need} />
             </div>
           </div>
@@ -225,7 +229,6 @@ function PackDetail({ product, collectionName }) {
         </div>
 
         {product.packTypes.map((type, index) => {
-          const orphanCount = orphans[index].orphans;
           const need = total.need;
           return (
             <div key={type.id} className="flex flex-wrap items-center gap-4 border-t border-line/35 py-3">
@@ -248,7 +251,7 @@ function PackDetail({ product, collectionName }) {
                 <RowGauge have={type.stock} need={need} />
               </div>
               <div className="ml-auto w-[100px]">
-                <RatioValue have={type.stock} need={need} note={orphanCount > 0 ? `dont ${orphanCount} orphelines` : null} />
+                <RatioValue have={type.stock} need={need} />
               </div>
             </div>
           );
