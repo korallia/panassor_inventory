@@ -17,6 +17,7 @@ export default function Historique() {
   const [query, setQuery] = useState("");
   const [data, setData] = useState({ movements: [], people: [] });
   const [status, setStatus] = useState("chargement");
+  const [open, setOpen] = useState(null);
 
   const load = useCallback(async () => {
     setStatus("chargement");
@@ -120,12 +121,10 @@ export default function Historique() {
               </thead>
               <tbody>
                 {rows.map((m) => (
-                  <tr key={m.id}>
+                  <tr key={m.id} onClick={() => setOpen(m)} className="cursor-pointer even:bg-[#1a120a] hover:bg-gold/10!">
                     <td className="td whitespace-nowrap text-[16px]! text-muted">{dateTime(m.at)}</td>
                     <td className="td">
-                      <Link to={`/produits/${m.productId}`} className="text-parch!">
-                        {m.product}
-                      </Link>
+                      <span className="text-parch">{m.product}</span>
                       <div className="sub mt-0.5">
                         {[m.variant, m.collection].filter(Boolean).join(" · ")}
                       </div>
@@ -148,9 +147,99 @@ export default function Historique() {
             {status === "erreur" && <div className="px-4 py-5 text-[15px] text-alert">Lecture de l'historique impossible.</div>}
             {status === "pret" && rows.length === 0 && <div className="sub px-4 py-5">Aucun mouvement pour ces filtres.</div>}
           </div>
+          {open && <Detail movement={open} onClose={() => setOpen(null)} />}
           {data.movements.length >= 300 && <div className="sub">Les 300 derniers mouvements : affine les filtres pour voir plus loin.</div>}
         </>
       )}
+    </div>
+  );
+}
+
+const fullDate = (iso) =>
+  new Date(iso).toLocaleString("fr-CA", {
+    weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+
+// Détail d'un mouvement : même fenêtre que Ajuster (avant / mouvement / après).
+function Detail({ movement: m, onClose }) {
+  useEffect(() => {
+    const onKey = (event) => event.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const before = m.after - m.change;
+  const box = "flex flex-col items-center gap-2 border bg-ink px-4 py-5";
+  const info = [
+    ["Raison", REASON_LABELS[m.reason] || m.reason],
+    ["Par", m.person ? m.person.split("@")[0] : "Square"],
+    ["Collection", m.collection || "—"],
+    ["Le", fullDate(m.at)],
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Mouvement ${m.product}`}
+        onClick={(event) => event.stopPropagation()}
+        className="relative flex w-full max-w-[660px] flex-col border border-gold/80 bg-panel px-7 py-9 sm:px-14 sm:py-12"
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Fermer"
+          className="absolute top-5 right-5 h-10 w-10 cursor-pointer border border-line bg-transparent text-[22px] leading-none text-gold-light hover:text-cream"
+        >
+          ×
+        </button>
+
+        <div className="lbl pr-12">Mouvement</div>
+        <h2 className="m-0 mt-2.5 pr-12 text-[30px] leading-tight font-semibold text-cream">
+          <Link to={`/produits/${m.productId}`} className="text-cream! no-underline hover:text-gold-light!">
+            {m.product}
+          </Link>
+        </h2>
+        <div className="sub mt-2">{[m.variant, m.collection].filter(Boolean).join(" · ")}</div>
+        <div className="mt-7 h-px bg-gold/45" />
+
+        <div className="mt-9 grid grid-cols-3 gap-5">
+          <div className={`${box} border-line`}>
+            <span className="lbl">Avant</span>
+            <span className="text-[34px] leading-tight font-semibold text-muted2">{before}</span>
+          </div>
+          <div className={`${box} border-line`}>
+            <span className="lbl">Mouvement</span>
+            <span className={`text-[34px] leading-tight font-semibold ${m.change > 0 ? "text-ok" : "text-alert"}`}>
+              {m.change > 0 ? "+" : "−"}
+              {Math.abs(m.change)}
+            </span>
+          </div>
+          <div className={`${box} border-gold`}>
+            <span className="lbl">Après</span>
+            <span className="text-[34px] leading-tight font-semibold text-cream">{m.after}</span>
+          </div>
+        </div>
+
+        <div className="mt-9 h-px bg-gold/45" />
+        <dl className="m-0 mt-2 flex flex-col">
+          {info.map(([label, value]) => (
+            <div key={label} className="mt-5 border-l-2 border-gold py-0.5 pl-4">
+              <dt className="lbl">{label}</dt>
+              <dd className="m-0 mt-1.5 text-[20px] text-cream">{value}</dd>
+            </div>
+          ))}
+        </dl>
+
+        {m.note && (
+          <>
+            <div className="mt-9 h-px bg-gold/45" />
+            <div className="lbl mt-7 mb-3">Note</div>
+            <div className="border-l-2 border-gold pl-3.5 text-[18px] text-muted italic">{m.note}</div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
