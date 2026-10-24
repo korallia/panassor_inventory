@@ -7,7 +7,7 @@ import { useNavigate } from "react-router-dom";
 
 import { useInventory } from "../store.jsx";
 import { ensembleState, kitsReady, leatherTotal, productState, stockStatus } from "../lib/inventory.js";
-import { PageHeader, SampleNote, StatusPill, Stepper } from "../components/ui.jsx";
+import { PageHeader, SampleNote, StatusPill, Stepper, TotalBand } from "../components/ui.jsx";
 
 const RANK = { out: 0, low: 1, ok: 2 };
 const plural = (n, one, many) => (n === 1 ? one : many);
@@ -105,11 +105,16 @@ export default function Alertes() {
   const navigate = useNavigate();
   const [type, setType] = useState("total");
   const [openId, setOpenId] = useState(null);
-  const { reports } = useInventory();
+  const { reports, collections } = useInventory();
   const openReport = reports.find((r) => r.id === openId);
   const alerts = all
     .filter((a) => isAlert(a, type))
     .sort((a, b) => RANK[a.status] - RANK[b.status] || b.missing[type] - a.missing[type]);
+  // Groupées par collection (dans l'ordre des collections), les ruptures d'abord dans chaque groupe.
+  const groups = collections
+    .map((collection) => ({ name: collection.name, alerts: alerts.filter((a) => a.collection === collection.name) }))
+    .filter((group) => group.alerts.length > 0);
+  const outCount = alerts.filter((a) => a.status === "out").length;
 
   return (
     <div className="flex flex-col gap-8">
@@ -138,34 +143,55 @@ export default function Alertes() {
               </button>
             ))}
           </div>
+          {alerts.length > 0 && (
+            <div className="mt-3">
+              <TotalBand
+                label={
+                  <>
+                    {plural(alerts.length, "Alerte", "Alertes")}
+                    {outCount > 0 && <span className="text-alert"> · {outCount} en rupture</span>}
+                  </>
+                }
+                value={alerts.length}
+              />
+            </div>
+          )}
           {alerts.length === 0 && <div className="border-t border-line/35 py-6 text-center text-[18px] text-ok">Aucune rupture, tout est au-dessus du minimum.</div>}
-          {alerts.map((alert) => (
-            <button
-              key={alert.id}
-              type="button"
-              onClick={() => navigate(alert.to)}
-              className="flex w-full cursor-pointer items-center gap-5 border-0 border-t border-line/35 bg-transparent py-3 text-left hover:bg-gold/5"
-            >
-              <div className="w-[130px] shrink-0">
-                <StatusPill status={alert.status === "ok" ? "low" : alert.status} />
+          {groups.map((group) => {
+            const out = group.alerts.filter((a) => a.status === "out").length;
+            const low = group.alerts.length - out;
+            return (
+              <div key={group.name} className="mt-3">
+                <div
+                  className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border border-gold/35 px-4 py-2.5"
+                  style={{ background: "linear-gradient(90deg,rgba(200,155,60,.16),rgba(200,155,60,.03))" }}
+                >
+                  <span className="text-[21px] font-semibold text-cream">{group.name}</span>
+                  <span className="sc text-[13px] tracking-[.12em]">
+                    {out > 0 && <span className="text-alert">{out} {plural(out, "rupture", "ruptures")}</span>}
+                    {out > 0 && low > 0 && <span className="text-faint"> · </span>}
+                    {low > 0 && <span className="text-warn">{low} sous le min.</span>}
+                  </span>
+                </div>
+                <div>
+                {group.alerts.map((alert) => (
+                  <button
+                    key={alert.id}
+                    type="button"
+                    onClick={() => navigate(alert.to)}
+                    className="flex w-full cursor-pointer items-center gap-5 border-0 bg-transparent px-4 py-3 text-left even:bg-[#1a120a] hover:bg-gold/10!"
+                  >
+                    <div className="w-[130px] shrink-0">
+                      <StatusPill status={alert.status === "ok" ? "low" : alert.status} />
+                    </div>
+                    <div className="min-w-0 flex-1 text-[19px] text-cream">{alert.name}</div>
+                    <div className="text-right text-[17px] text-alert-soft">{missingText(alert, type)}</div>
+                  </button>
+                ))}
+                </div>
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-[19px] text-cream">{alert.name}</div>
-                <div className="sub mt-0.5">{alert.collection}</div>
-              </div>
-              <div className="text-right text-[17px] text-alert-soft">{missingText(alert, type)}</div>
-            </button>
-          ))}
-          <div className="mt-2 flex w-fit flex-wrap items-baseline gap-x-3 gap-y-1 border border-gold bg-panel2 px-4 py-2.5">
-            <span className="text-[30px] leading-none text-cream">{alerts.length}</span>
-            <span className="text-[17px] text-muted">{alerts.length === 1 ? "alerte" : "alertes"}</span>
-            {alerts.some((a) => a.status === "out") && (
-              <span className="flex items-baseline gap-2 border-l border-line pl-3">
-                <span className="text-[22px] leading-none text-alert-soft">{alerts.filter((a) => a.status === "out").length}</span>
-                <span className="text-[16px] text-alert-muted">en rupture</span>
-              </span>
-            )}
-          </div>
+            );
+          })}
         </section>
         {openReport && <ReportPreview report={openReport} />}
         </div>

@@ -534,3 +534,16 @@ export function unitFor(product, count) {
   if (product?.type === "ensemble") return count === 1 ? "ensemble" : "ensembles";
   return null;
 }
+
+// Total en bandeau pleine largeur (même dégradé que les headers de Minimums).
+export function TotalBand({ label, value }) {
+  return (
+    <div
+      className="mt-2 mb-3 flex items-center justify-between gap-4 border border-gold/40 px-5 py-3.5"
+      style={{ background: "linear-gradient(90deg,rgba(200,155,60,.16),rgba(200,155,60,.03))" }}
+    >
+      <span className="sc text-[14px] tracking-[.16em] text-gold-light">{label}</span>
+      <span className="text-[32px] leading-none font-semibold text-cream">{value}</span>
+    </div>
+  );
+}
