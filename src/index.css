@@ -2,6 +2,7 @@
 
 /* Palette Panassor (mêmes valeurs que la maquette du canevas). */
 @theme {
+  --breakpoint-3xl: 106rem; /* 1696px : assez large pour la légende à gauche (page Kits) */
   --color-ink: #080504;
   --color-panel: #0d0805;
   --color-panel2: #120c07;

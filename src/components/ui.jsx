@@ -255,34 +255,58 @@ export function GaugeColumn({ label, note, have, need, unit, height = 300 }) {
 }
 
 /** Panneau latéral des jauges (colonne de droite). */
-export function GaugePanel({ title = "Objectifs", children, footer }) {
+export function GaugePanel({ title = "Objectifs", children, footer, legend = true }) {
   return (
     <aside className="flex flex-col gap-6 border border-line/70 bg-panel px-6 py-7 lg:sticky lg:top-8">
       <div className="sc text-center text-[18px] tracking-[.2em] text-gold">{title}</div>
       <div className="grid flex-1 auto-cols-fr grid-flow-col gap-3">{children}</div>
       {footer}
-      <div className="sub mt-auto flex flex-col gap-2 border-t border-line/40 pt-4">
-        <span className="flex items-center gap-2">
-          <span className="inline-block h-4 w-3" style={GAUGE_STYLES.ok} />
-          Objectif atteint
-        </span>
-        <span className="flex items-center gap-2">
-          <span className="inline-block h-4 w-3" style={GAUGE_STYLES.short} />
-          Présent, mais sous l'objectif
-        </span>
-        <span className="flex items-center gap-2">
-          <span className="box-border inline-block h-4 w-3" style={GAUGE_STYLES.missing} />
-          Manquant
-        </span>
-      </div>
+      {legend && (
+        <div className="mt-auto border-t border-line/40 pt-4">
+          <GaugeKey />
+        </div>
+      )}
     </aside>
   );
 }
 
-/** Fiche : contenu à gauche, jauges à droite (au-dessus sur mobile). */
+/** Légende des jauges (couleurs des cases). */
+export function GaugeKey() {
+  return (
+    <div className="sub flex flex-col gap-2">
+      <span className="flex items-center gap-2">
+        <span className="inline-block h-4 w-3" style={GAUGE_STYLES.ok} />
+        Objectif atteint
+      </span>
+      <span className="flex items-center gap-2">
+        <span className="inline-block h-4 w-3" style={GAUGE_STYLES.short} />
+        Présent, mais sous l'objectif
+      </span>
+      <span className="flex items-center gap-2">
+        <span className="box-border inline-block h-4 w-3" style={GAUGE_STYLES.missing} />
+        Manquant
+      </span>
+    </div>
+  );
+}
+
+/** Légende des jauges dans une boîte : vaut pour toute la page.
+ *  Grand écran : dans le vide à gauche, suit le défilement. Sinon : en bas. */
+export function PageLegend() {
+  return (
+    <div className="order-3 min-w-0 lg:col-span-2 3xl:order-none 3xl:col-span-1 3xl:sticky 3xl:top-14 3xl:self-start 3xl:pt-6">
+      <div className="w-fit border border-line/70 bg-panel px-5 py-4">
+        <GaugeKey />
+      </div>
+    </div>
+  );
+}
+
+/** Fiche : contenu à gauche, jauges à droite (au-dessus sur mobile), légende à part. */
 export function DetailLayout({ aside, children }) {
   return (
-    <div className="grid w-full items-start justify-center gap-8 lg:grid-cols-[minmax(0,620px)_minmax(0,480px)] lg:gap-12">
+    <div className="grid w-full items-start justify-center gap-8 lg:grid-cols-[minmax(0,620px)_minmax(0,480px)] lg:gap-12 3xl:grid-cols-[minmax(230px,1fr)_minmax(0,620px)_minmax(0,480px)_minmax(0,1fr)]">
+      <PageLegend />
       <div className="order-2 flex min-w-0 flex-col gap-8 lg:order-1">{children}</div>
       <div className="order-1 lg:order-2">{aside}</div>
     </div>
