@@ -42,7 +42,7 @@ function readAtelierConfig() {
 
 export async function loadAtelierData() {
   const atelierConfig = readAtelierConfig();
-  const [collectionsRes, productsRes, imagesRes, variantsRes, componentsRes, stockRes] = await Promise.all([
+  const [collectionsRes, productsRes, imagesRes, variantsRes, componentsRes, stockRes, minimumsRes] = await Promise.all([
     readOnly(`SELECT id, name_fr, status FROM collections ORDER BY name_fr`),
     readOnly(`
       SELECT id, collection_id, slug_fr, name_fr, name_en, title_fr, title_en,
@@ -53,19 +53,23 @@ export async function loadAtelierData() {
       SELECT pi.product_id, pi.url, pi.alt_fr, pi.alt_en, pi.is_main, pi.sort_order, c.name_fr AS color
       FROM product_images pi LEFT JOIN colors c ON c.id = pi.color_id
       ORDER BY pi.product_id, pi.sort_order`),
-    // Variantes de couleur (étuis des kits).
+    // Variantes de couleur (étuis des kits) et variantes sans couleur, qui servent
+    // seulement au stock (aiguilles : Droite, Courbe, Aiguille — migration 015).
     readOnly(`
-      SELECT pcv.id, pcv.product_id, pcv.price_delta_cents, c.name_fr AS color, c.hex_code
-      FROM product_color_variants pcv JOIN colors c ON c.id = pcv.color_id
-      ORDER BY pcv.product_id, c.name_fr`),
+      SELECT pcv.id, pcv.product_id, pcv.price_delta_cents, pcv.label_fr, c.name_fr AS color, c.hex_code
+      FROM product_variants pcv LEFT JOIN colors c ON c.id = pcv.color_id
+      ORDER BY pcv.product_id, c.name_fr, pcv.id`),
     readOnly(`SELECT kit_product_id, included_product_id, quantity FROM kit_components ORDER BY kit_product_id, sort_order`),
     // Le stock vit dans la base (migration 014) : une ligne par produit, ou par variante.
     readOnly(`SELECT id, product_id, variant_id, quantity FROM stock`),
+    // Minimums (migration 017) : par produit, ou par variante (étui d'une couleur).
+    readOnly(`SELECT product_id, variant_id, minimum FROM minimums`),
   ]);
 
   const variantsByProduct = {};
   for (const v of variantsRes.rows) (variantsByProduct[v.product_id] ||= []).push(v);
-  const colorVariantsOf = (productId) => variantsByProduct[productId] || [];
+  const colorVariantsOf = (productId) => (variantsByProduct[productId] || []).filter((v) => v.color);
+  const sortsOf = (productId) => (variantsByProduct[productId] || []).filter((v) => !v.color && v.label_fr);
 
   const stockByProduct = {};
   const stockByVariant = {};
@@ -73,8 +77,15 @@ export async function loadAtelierData() {
     if (row.variant_id == null) stockByProduct[row.product_id] = row;
     else stockByVariant[row.variant_id] = row;
   }
+  const minByProduct = {};
+  const minByVariant = {};
+  for (const row of minimumsRes.rows) {
+    if (row.variant_id == null) minByProduct[row.product_id] = row.minimum;
+    else minByVariant[row.variant_id] = row.minimum;
+  }
+
   // Une ligne de stock vue par l'atelier : son id sert aux boutons « Ajuster ».
-  const line = (row) => ({ stockId: row ? String(row.id) : null, stock: row?.quantity ?? 0, min: 0 });
+  const line = (row) => ({ stockId: row ? String(row.id) : null, stock: row?.quantity ?? 0 });
 
   const id = (value) => String(value);
   const kitsRows = productsRes.rows.filter((p) => p.is_kit);
@@ -114,33 +125,59 @@ export async function loadAtelierData() {
         collectionId: id(p.collection_id),
         name: p.name_fr,
         type: "ensemble",
-        objective: ensemble.objective ?? 0,
+        objective: minByProduct[p.id] ?? ensemble.objective ?? 0,
         components: ensemble.components
           .filter((c) => bySlug[c.slug])
           .map((c) => ({ productId: id(bySlug[c.slug].id), qty: c.qty || 1 })),
       };
     }
+    const sorts = sortsOf(p.id);
+    if (sorts.length > 1) {
+      // Paquet (aiguilles de suture) : chaque sorte (Droite, Courbe) a son stock.
+      // Un paquet = 1 de chaque ; le surplus d'une sorte = orphelines.
+      return {
+        id: id(p.id),
+        collectionId: id(p.collection_id),
+        name: p.name_fr,
+        type: "paquet",
+        min: minByProduct[p.id] ?? 0,
+        inKit: inAKit.has(id(p.id)),
+        packTypes: sorts.map((v) => ({ id: id(v.id), name: `${v.label_fr}s`, ...line(stockByVariant[v.id]) })),
+      };
+    }
+    // Une seule sorte (aiguilles de douleur) : se compte comme une pièce, sur sa variante.
+    const row = sorts.length === 1 ? stockByVariant[sorts[0].id] : stockByProduct[p.id];
     return {
       id: id(p.id),
       collectionId: id(p.collection_id),
       name: p.name_fr,
       type: p.customizable ? "outil" : "piece",
-      ...line(stockByProduct[p.id]),
+      ...line(row),
+      min: minByProduct[p.id] ?? 0,
       inKit: inAKit.has(id(p.id)),
     };
   });
 
-  const kits = kitsRows.map((k) => {
+  // Étuis : minimum enregistré par couleur (réglable à la main ; changer le
+  // minimum de kits le répartit automatiquement, voir la page Minimums).
+  const kits = kitsRows.map((k) => buildKit(k));
+  function buildKit(k) {
     const variants = colorVariantsOf(k.id);
     // Étuis : une ligne par couleur du kit (stock de la variante de couleur).
     const leather = variants.length
-      ? variants.map((v) => ({ color: v.color, swatch: v.hex_code || "#2a180c", ...line(stockByVariant[v.id]) }))
-      : [{ color: "Étuis", swatch: "#2a180c", ...line(stockByProduct[k.id]) }];
+      ? variants.map((v) => ({
+          variantId: id(v.id),
+          color: v.color,
+          swatch: v.hex_code || "#2a180c",
+          ...line(stockByVariant[v.id]),
+          min: minByVariant[v.id] ?? 0,
+        }))
+      : [{ color: "Étuis", swatch: "#2a180c", ...line(stockByProduct[k.id]), min: 0 }];
     return {
       id: id(k.id),
       collectionId: id(k.collection_id),
       name: k.name_fr,
-      min: 0,
+      min: minByProduct[k.id] ?? 0,
       leather,
       components: kitComponentRows
         .filter((c) => c.kit_product_id === k.id)
@@ -150,7 +187,7 @@ export async function loadAtelierData() {
         })
         .filter((c) => pieceRows.some((p) => id(p.id) === c.productId)),
     };
-  });
+  }
 
   const imagesByProduct = {};
   for (const img of imagesRes.rows) (imagesByProduct[img.product_id] ||= []).push(img);
@@ -159,7 +196,7 @@ export async function loadAtelierData() {
     id: id(p.id),
     collectionId: id(p.collection_id),
     isKit: p.is_kit,
-    type: p.is_kit ? undefined : ensembles[p.slug_fr] ? "ensemble" : p.customizable ? "outil" : "piece",
+    type: p.is_kit ? undefined : ensembles[p.slug_fr] ? "ensemble" : sortsOf(p.id).length > 1 ? "paquet" : p.customizable ? "outil" : "piece",
     nameFr: p.name_fr || "",
     nameEn: p.name_en || "",
     titleFr: p.title_fr || "",
@@ -176,7 +213,7 @@ export async function loadAtelierData() {
       main: img.is_main,
       color: img.color || null, // photo propre à une variante de couleur (product_images.color_id)
     })),
-    // Sous-produits : variantes de couleur (table product_color_variants), avec écart de prix et stock.
+    // Sous-produits : variantes de couleur (table product_variants), avec écart de prix et stock.
     variants: colorVariantsOf(p.id).map((v) => ({
       color: v.color,
       swatch: v.hex_code || "#2a180c",

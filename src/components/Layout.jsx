@@ -8,6 +8,7 @@ const sections = [
   { to: "/inventaire", label: "Inventaire" },
   { to: "/kits", label: "Kits" },
   { to: "/minimums", label: "Minimums" },
+  { to: "/historique", label: "Historique" },
   { to: "/alertes", label: "Alertes et rapports" },
   { to: "/catalogue", label: "Catalogue" },
   { to: "/parametres", label: "Paramètres" },

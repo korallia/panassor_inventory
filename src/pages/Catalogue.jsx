@@ -112,7 +112,7 @@ const CatalogRow = memo(function CatalogRow({ entry, collectionName, open, onTog
         <Thumb url={img?.url} size={56} />
         <div className="min-w-0 flex-1">
           <div className={entry.isKit ? "text-[22px] font-semibold text-cream" : "text-[19px] text-cream"}>{entry.nameFr}</div>
-          <div className="flex flex-wrap items-center gap-2 text-[14px] text-faint">
+          <div className="sub mt-0.5 flex flex-wrap items-center gap-2">
             {entry.nameEn || "— nom anglais à remplir"}
             {(entry.variants || []).length > 0 && (
               <span className="flex items-center gap-1" title={`${entry.variants.length} variantes`}>
@@ -125,7 +125,7 @@ const CatalogRow = memo(function CatalogRow({ entry, collectionName, open, onTog
         </div>
         <div className="hidden w-[160px] text-[15px] text-muted2 md:block">
           {entry.isKit ? "Kit complet" : TYPE_LABELS[entry.type] ?? ""}
-          <div className="text-[13px] text-faint">{collectionName}</div>
+          <div className="sub mt-0.5">{collectionName}</div>
         </div>
         <div className="w-[90px] text-right text-[18px] text-cream tabular-nums">{entry.price ? `${entry.price} $` : <span className="text-faint">—</span>}</div>
         {!readOnly && <button
@@ -213,7 +213,7 @@ function Variants({ entry, update, readOnly }) {
   return (
     <div className="flex flex-col gap-2">
       <ColumnTitle>
-        Variantes à prix différent <span className="ml-2 text-faint">{shown.length}</span>
+        Variantes à prix différent <span className="sub-num ml-2">{shown.length}</span>
       </ColumnTitle>
       <div className="grid grid-cols-[minmax(0,1fr)_120px_120px] items-center gap-x-4 px-1 text-[12px] tracking-[.14em] text-gold">
         <span className="sc">Couleur</span>
@@ -229,8 +229,8 @@ function Variants({ entry, update, readOnly }) {
               return img ? <Thumb url={img.url} size={40} /> : null;
             })()}
             <span className="text-[18px] text-cream">{v.color}</span>
-            <span className="text-[13px] text-faint">
-              {entry.images.filter((im) => im.color === v.color).length} photo(s)
+            <span className="sub">
+              <span className="sub-num">{entry.images.filter((im) => im.color === v.color).length}</span> photo(s)
             </span>
           </span>
           <span className="text-right">
@@ -278,7 +278,7 @@ function Thumb({ url, size }) {
       {url && !broken ? (
         <img src={assetUrl(url)} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" onError={() => setBroken(true)} />
       ) : (
-        <span className="text-[11px] text-faint">{url ? "introuvable" : "image"}</span>
+        <span className="sub text-[10px]!">{url ? "introuvable" : "image"}</span>
       )}
     </div>
   );
@@ -326,7 +326,7 @@ function Images({ entry, update, readOnly }) {
   return (
     <div className="flex flex-col gap-3">
       <ColumnTitle>
-        Images {count > 0 && <span className="ml-2 text-faint">{at + 1} / {count}</span>}
+        Images {count > 0 && <span className="sub-num ml-2">{at + 1} / {count}</span>}
       </ColumnTitle>
       {staleServer && (
         <div className="text-[14px] text-gold-light">Relance « npm run dev » pour voir les photos classées par couleur.</div>
@@ -349,14 +349,14 @@ function Images({ entry, update, readOnly }) {
             >
               {chip.swatch && <span className="inline-block h-3.5 w-3.5 border border-line" style={{ background: chip.swatch }} />}
               {chip.label}
-              <span className="text-[13px] text-faint">{chip.n}</span>
+              <span className="sub-num">{chip.n}</span>
             </button>
           ))}
         </div>
       )}
 
       {count === 0 ? (
-        <div className="flex h-[220px] items-center justify-center border border-dashed border-line text-[15px] text-faint">Aucune image</div>
+        <div className="flex h-[220px] items-center justify-center border border-dashed border-line sub">Aucune image</div>
       ) : (
         <div className="flex flex-col gap-3 md:flex-row">
           {/* Carrousel */}
@@ -470,7 +470,7 @@ function BigImage({ url }) {
       {url && !broken ? (
         <img key={url} src={assetUrl(url, 1000)} alt="" decoding="async" className="h-full w-full object-contain" onError={() => setBroken(true)} />
       ) : (
-        <span className="text-[14px] text-faint">{url ? "Image introuvable" : "Aucune image"}</span>
+        <span className="sub">{url ? "Image introuvable" : "Aucune image"}</span>
       )}
     </div>
   );

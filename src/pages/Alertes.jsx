@@ -120,7 +120,7 @@ export default function Alertes() {
         <section className="flex min-w-0 flex-col gap-2 border border-line/50 bg-panel/60 px-6 py-5">
           <div className="flex flex-wrap items-baseline justify-between gap-3">
             <div className="sc text-[16px] tracking-[.16em] text-gold">Alertes en cours</div>
-            <div className="text-[15px] text-faint">ruptures + minimums</div>
+            <div className="sub">ruptures + minimums</div>
           </div>
           <div role="tablist" aria-label="Type de manque" className="flex flex-wrap border-b border-line/50">
             {TYPES.map((t) => (
@@ -151,7 +151,7 @@ export default function Alertes() {
               </div>
               <div className="min-w-0 flex-1">
                 <div className="text-[19px] text-cream">{alert.name}</div>
-                <div className="text-[14px] text-faint">{alert.collection}</div>
+                <div className="sub mt-0.5">{alert.collection}</div>
               </div>
               <div className="text-right text-[17px] text-alert-soft">{missingText(alert, type)}</div>
             </button>
@@ -235,7 +235,7 @@ function ReportItem({ report, open, onToggleOpen, update, remove }) {
       >
         <div className="min-w-0 flex-1 text-left">
           <div className="text-[19px] text-cream">{report.name}</div>
-          <div className="text-[14px] text-faint">
+          <div className="sub mt-0.5">
             {scheduleText(report)} · {report.channel.toLowerCase()}
           </div>
         </div>
@@ -403,7 +403,7 @@ function ReportPreview({ report }) {
                     <StatusPill status={a.status === "ok" ? "low" : a.status} />
                   </div>
                   <div className="min-w-0 flex-1 text-[17px] text-cream">
-                    {a.name} <span className="text-[14px] text-faint">· {a.collection}</span>
+                    {a.name} <span className="sub">· {a.collection}</span>
                   </div>
                   <div className="text-[16px] text-alert-soft">{missingText(a, "total")}</div>
                 </div>
@@ -422,7 +422,9 @@ function ReportPreview({ report }) {
                   <div key={kit.id} className={`border px-4 py-3 ${low ? "border-alert-line bg-alert-bg" : "border-ok-line bg-[#0e1a10]"}`}>
                     <div className="text-[15px] text-muted">{kit.name}</div>
                     <div className={`text-[32px] leading-tight ${low ? "text-alert-soft" : "text-[#cfe5d2]"}`}>{ready}</div>
-                    <div className="text-[13px] text-faint">minimum {kit.min}</div>
+                    <div className="sub">
+                      minimum <span className="sub-num">{kit.min}</span>
+                    </div>
                   </div>
                 );
               })}
@@ -446,7 +448,7 @@ function ReportPreview({ report }) {
                             <span className="text-muted">{p.name}</span>
                             <span className={st.status === "ok" ? "text-cream" : "text-alert-soft"}>
                               {st.free}
-                              {p.type === "paquet" && <span className="ml-1 text-[13px] text-faint">paq.</span>}
+                              {p.type === "paquet" && <span className="sub ml-1">paq.</span>}
                             </span>
                           </div>
                         );
@@ -459,7 +461,7 @@ function ReportPreview({ report }) {
                         return (
                           <div key={p.id} className="flex justify-between border-t border-line/30 py-1.5 text-[16px]">
                             <span className="text-muted">
-                              {p.name} <span className="text-[13px] text-faint">ensemble</span>
+                              {p.name} <span className="sub">ensemble</span>
                             </span>
                             <span className={low ? "text-alert-soft" : "text-cream"}>{st.possible}</span>
                           </div>
@@ -472,10 +474,10 @@ function ReportPreview({ report }) {
           </PreviewBlock>
         )}
 
-        {report.sections.length === 0 && <div className="text-[16px] text-faint">Coche au moins un contenu.</div>}
+        {report.sections.length === 0 && <div className="sub">Coche au moins un contenu.</div>}
       </div>
 
-      <div className="border-t border-line/40 px-6 py-3 text-[13px] text-faint">
+      <div className="sub border-t border-line/40 px-6 py-3">
         Envoyé automatiquement par Panassor · Atelier · {scheduleText(report).toLowerCase()}
       </div>
     </section>
@@ -487,7 +489,7 @@ function PreviewBlock({ title, count, children }) {
     <div className="flex flex-col gap-2">
       <div className="flex items-baseline gap-3 border-b border-gold/50 pb-1.5">
         <span className="sc text-[16px] tracking-[.16em] text-gold">{title}</span>
-        {count !== undefined && <span className="text-[15px] text-faint">{count}</span>}
+        {count !== undefined && <span className="sub-num">{count}</span>}
       </div>
       {children}
     </div>
