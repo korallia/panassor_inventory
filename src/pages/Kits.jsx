@@ -9,6 +9,7 @@ import { useInventory } from "../store.jsx";
 import { kitsReady, leatherTotal, productStock } from "../lib/inventory.js";
 import {
   GaugeColumn,
+  GaugeKey,
   GaugePanel,
   PageHeader,
   RatioValue,
@@ -59,7 +60,13 @@ export default function Kits() {
         </div>
       </PageHeader>
 
-      <div className="grid w-full items-stretch justify-center gap-8 lg:grid-cols-[minmax(0,620px)_minmax(0,480px)] lg:gap-12">
+      <div className="grid w-full items-stretch justify-center gap-8 lg:grid-cols-[minmax(0,620px)_minmax(0,480px)] lg:gap-12 3xl:grid-cols-[minmax(230px,1fr)_minmax(0,620px)_minmax(0,480px)_minmax(0,1fr)]">
+        {/* Légende : vaut pour toute la page, dans le vide à gauche sur grand écran (en bas sinon). */}
+        <div className="order-3 min-w-0 lg:col-span-2 3xl:order-none 3xl:col-span-1 3xl:sticky 3xl:top-14 3xl:self-start 3xl:pt-6">
+          <div className="w-fit border border-line/70 bg-panel px-5 py-4">
+            <GaugeKey />
+          </div>
+        </div>
         <div className="order-2 min-w-0 lg:order-1">
         {/* Composants */}
         <section className="flex h-full flex-col gap-2 border border-line/50 bg-panel/60 px-6 py-5">
@@ -67,6 +74,7 @@ export default function Kits() {
             <div className="sc text-[16px] tracking-[.16em] text-gold">Pièces en stock</div>
             <div className="text-[15px] text-gold-light">Minimum libre ignoré · priorité aux kits</div>
           </div>
+          <TotalBand label={`${plural(fromTools, "Kit faisable", "Kits faisables")} avec ces pièces`} value={fromTools} />
 
           {kit.components.map((component) => {
             const product = productsById[component.productId];
@@ -89,15 +97,12 @@ export default function Kits() {
             );
           })}
 
-          <div className="flex w-fit flex-wrap items-baseline gap-x-3 gap-y-1 border border-gold bg-panel2 px-4 py-2.5">
-            <span className="text-[30px] leading-none text-cream">{fromTools}</span>
-            <span className="text-[17px] text-muted">{plural(fromTools, "kit faisable", "kits faisables")} avec ces pièces</span>
-          </div>
 
           <div className="mt-6 flex items-baseline justify-between gap-3 border-t border-gold/60 pt-5">
             <div className="sc text-[16px] tracking-[.16em] text-gold">Étuis de cuir</div>
             <div className="sub">fixent les kits visés</div>
           </div>
+          <TotalBand label={plural(target, "Kit visé", "Kits visés")} value={target} />
           {kit.leather.map((leather) => (
             <div key={leather.color} className="flex items-center justify-between gap-4 border-t border-line/35 py-3">
               <span className="flex items-center gap-3">
@@ -114,19 +119,28 @@ export default function Kits() {
               </StockControl>
             </div>
           ))}
-          <div className="flex w-fit flex-wrap items-baseline gap-x-3 gap-y-1 border border-gold bg-panel2 px-4 py-2.5">
-            <span className="text-[30px] leading-none text-cream">{target}</span>
-            <span className="text-[17px] text-muted">{plural(target, "étui", "étuis")} · kits visés</span>
-          </div>
         </section>
         </div>
         <div className="order-1 flex flex-col gap-8 lg:order-2 lg:*:static lg:*:flex-1">
-          <GaugePanel>
+          <GaugePanel legend={false}>
             <GaugeColumn label="Kits prêts" note={`sur ${target} étuis · minimum ${kit.min}`} have={ready} need={target} unit="kits" />
           </GaugePanel>
         </div>
       </div>
       <SampleNote />
+    </div>
+  );
+}
+
+// Total en bandeau pleine largeur (même dégradé que les headers de Minimums).
+function TotalBand({ label, value }) {
+  return (
+    <div
+      className="mt-2 mb-3 flex items-center justify-between gap-4 border border-gold/40 px-5 py-3.5"
+      style={{ background: "linear-gradient(90deg,rgba(200,155,60,.16),rgba(200,155,60,.03))" }}
+    >
+      <span className="sc text-[14px] tracking-[.16em] text-gold-light">{label}</span>
+      <span className="text-[32px] leading-none font-semibold text-cream">{value}</span>
     </div>
   );
 }

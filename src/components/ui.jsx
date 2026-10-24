@@ -255,27 +255,38 @@ export function GaugeColumn({ label, note, have, need, unit, height = 300 }) {
 }
 
 /** Panneau latéral des jauges (colonne de droite). */
-export function GaugePanel({ title = "Objectifs", children, footer }) {
+export function GaugePanel({ title = "Objectifs", children, footer, legend = true }) {
   return (
     <aside className="flex flex-col gap-6 border border-line/70 bg-panel px-6 py-7 lg:sticky lg:top-8">
       <div className="sc text-center text-[18px] tracking-[.2em] text-gold">{title}</div>
       <div className="grid flex-1 auto-cols-fr grid-flow-col gap-3">{children}</div>
       {footer}
-      <div className="sub mt-auto flex flex-col gap-2 border-t border-line/40 pt-4">
-        <span className="flex items-center gap-2">
-          <span className="inline-block h-4 w-3" style={GAUGE_STYLES.ok} />
-          Objectif atteint
-        </span>
-        <span className="flex items-center gap-2">
-          <span className="inline-block h-4 w-3" style={GAUGE_STYLES.short} />
-          Présent, mais sous l'objectif
-        </span>
-        <span className="flex items-center gap-2">
-          <span className="box-border inline-block h-4 w-3" style={GAUGE_STYLES.missing} />
-          Manquant
-        </span>
-      </div>
+      {legend && (
+        <div className="mt-auto border-t border-line/40 pt-4">
+          <GaugeKey />
+        </div>
+      )}
     </aside>
+  );
+}
+
+/** Légende des jauges (couleurs des cases). */
+export function GaugeKey() {
+  return (
+    <div className="sub flex flex-col gap-2">
+      <span className="flex items-center gap-2">
+        <span className="inline-block h-4 w-3" style={GAUGE_STYLES.ok} />
+        Objectif atteint
+      </span>
+      <span className="flex items-center gap-2">
+        <span className="inline-block h-4 w-3" style={GAUGE_STYLES.short} />
+        Présent, mais sous l'objectif
+      </span>
+      <span className="flex items-center gap-2">
+        <span className="box-border inline-block h-4 w-3" style={GAUGE_STYLES.missing} />
+        Manquant
+      </span>
+    </div>
   );
 }
 
