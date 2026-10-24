@@ -5,11 +5,18 @@ import { useEffect, useState } from "react";
 
 import { useInventory } from "../store.jsx";
 
-// Raison et note : pour l'instant SEULEMENT dans l'interface (rien n'est envoyé
-// ni enregistré). Elles seront branchées sur la base avec l'étape historique.
+// Raisons (type stock_reason de la base, migration 017), selon le sens.
+// Elles sont enregistrées avec la note dans l'historique (stock_movements).
+// « Vente » est réservée aux ventes Square.
+export const REASON_LABELS = {
+  fabrication: "Fabrication",
+  perte: "Perte",
+  correction: "Correction",
+  vente: "Vente",
+};
 const REASONS = {
-  ajouter: ["Fabrication", "Correction"],
-  retirer: ["Perte", "Correction"],
+  ajouter: ["fabrication", "correction"],
+  retirer: ["perte", "correction"],
 };
 
 /**
@@ -24,7 +31,8 @@ export function StockControl({ stockId, value, label, children }) {
   const step = async (action) => {
     if (!stockId || busy) return;
     setBusy(true);
-    await adjustStock(stockId, { action, amount: 1 });
+    // − / + rapides : + = fabrication, − = correction (pour une perte, passer par la fenêtre).
+    await adjustStock(stockId, { action, amount: 1, reason: action === "ajouter" ? "fabrication" : "correction" });
     setBusy(false);
   };
   const side = "h-9 w-9 cursor-pointer border border-line bg-panel2 text-[20px] text-cream hover:bg-gold/8 disabled:cursor-not-allowed disabled:opacity-40";
@@ -95,7 +103,7 @@ export default function AjusterPanel() {
     if (invalid || busy) return;
     setBusy(true);
     setError(null);
-    const result = await adjustStock(adjusting, { action, amount });
+    const result = await adjustStock(adjusting, { action, amount, reason, note });
     setBusy(false);
     if (!result.ok) return setError(result.error);
     closeAdjust();
@@ -219,7 +227,7 @@ export default function AjusterPanel() {
               >
                 {REASONS[action].map((r) => (
                   <option key={r} value={r}>
-                    {r}
+                    {REASON_LABELS[r]}
                   </option>
                 ))}
               </select>

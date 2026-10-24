@@ -1,7 +1,7 @@
 // État de l'application. Sans serveur : données d'exemple en mémoire, les
 // boutons + / − servent à tester les calculs. Avec les vraies données : le
 // stock se change par le panneau « Ajuster » (appel à l'API, voir stock.js).
-import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
 import * as sample from "./data/sampleData.js";
 import { computeInventory } from "./lib/inventory.js";
@@ -246,13 +246,18 @@ export function InventoryProvider({ children }) {
   const openAdjust = useCallback((stockId) => setAdjusting(stockId), []);
   const closeAdjust = useCallback(() => setAdjusting(null), []);
 
-  // Retrouve une ligne de stock (pièce ou étui) par son id.
+  // Retrouve une ligne de stock (pièce, sorte d'aiguille ou étui) par son id.
   const findStockLine = useCallback(
     (stockId) => {
       const collectionName = (id) => state.collections.find((c) => c.id === id)?.name ?? "";
       for (const product of state.products) {
         if (product.stockId === stockId) {
           return { name: product.name, detail: collectionName(product.collectionId), stock: product.stock };
+        }
+        for (const type of product.packTypes || []) {
+          if (type.stockId === stockId) {
+            return { name: `${product.name} · ${type.name.toLowerCase()}`, detail: collectionName(product.collectionId), stock: type.stock };
+          }
         }
       }
       for (const kit of state.kits) {
@@ -283,6 +288,25 @@ export function InventoryProvider({ children }) {
     [reload]
   );
 
+  // Minimums (vraies données) : enregistrés en base, 400 ms après le dernier clic,
+  // pour ne pas envoyer une requête à chaque − / +.
+  const minimumTimers = useRef({});
+  const saveMinimum = useCallback(({ productId, variantId = null, minimum }) => {
+    const key = `${productId}:${variantId ?? ""}`;
+    clearTimeout(minimumTimers.current[key]);
+    minimumTimers.current[key] = setTimeout(() => {
+      fetch("/api/minimum", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId: Number(productId), variantId: variantId == null ? null : Number(variantId), minimum }),
+      })
+        .then((response) => {
+          if (!response.ok) setError("Minimum non enregistré.");
+        })
+        .catch(() => setError("Minimum non enregistré."));
+    }, 400);
+  }, []);
+
   const logout = useCallback(async () => {
     await fetch("/api/logout", { method: "POST" }).catch(() => {});
     setStatus("connexion");
@@ -307,8 +331,9 @@ export function InventoryProvider({ children }) {
       closeAdjust,
       findStockLine,
       adjustStock,
+      saveMinimum,
     }),
-    [state, computed, status, error, requestCode, verifyCode, logout, reload, adjusting, openAdjust, closeAdjust, findStockLine, adjustStock]
+    [state, computed, status, error, requestCode, verifyCode, logout, reload, adjusting, openAdjust, closeAdjust, findStockLine, adjustStock, saveMinimum]
   );
   return <InventoryContext.Provider value={value}>{children}</InventoryContext.Provider>;
 }

@@ -186,7 +186,7 @@ function PieceDetail({ product, collectionName }) {
 
 // ---------------------------------------------------------------- 1D(1)
 function PackDetail({ product, collectionName }) {
-  const { readOnly, reserved, dispatch } = useInventory();
+  const { source, reserved, dispatch } = useInventory();
   const state = productState(product, reserved);
   const kitsUsing = useKitsUsing(product.id);
   const orphans = packOrphans(product);
@@ -195,9 +195,8 @@ function PackDetail({ product, collectionName }) {
   const total = totalTarget(toReserve, state.min);
   const missing = Math.max(0, toReserve - state.reserved) + state.missingForMin;
   const low = state.status !== "ok" || missing > 0;
-  const plural = (n) => (n === 1 ? "paquet" : "paquets");
+  const plural = (n) => (n === 1 ? "Paquet" : "Paquets");
   const rowScale = Math.max(...product.packTypes.map((type, i) => type.stock + missingByType[i].missing));
-  const composition = product.packTypes.map((type) => `1 ${type.name.toLowerCase().replace(/s$/, "")}`).join(" + ");
 
   return (
     <div className="flex flex-col gap-8">
@@ -232,15 +231,18 @@ function PackDetail({ product, collectionName }) {
             <div key={type.id} className="flex flex-wrap items-center gap-4 border-t border-line/35 py-3">
               <div className="w-[130px]">
                 <div className="text-[21px] text-cream">{type.name}</div>
-                <div className="mt-2">
-                  <Stepper
-                    small
-                    label={`Stock ${type.name}`}
-                    disabled={readOnly}
-                    value={type.stock}
-                    onChange={(value) => dispatch({ type: "setPackStock", productId: product.id, typeId: type.id, value })}
-                  />
-                </div>
+                {/* Données d'exemple seulement : − / + pour tester. Avec les vraies données,
+                    on ajuste par les boîtes en bas. */}
+                {source !== "live" && (
+                  <div className="mt-2">
+                    <Stepper
+                      small
+                      label={`Stock ${type.name}`}
+                      value={type.stock}
+                      onChange={(value) => dispatch({ type: "setPackStock", productId: product.id, typeId: type.id, value })}
+                    />
+                  </div>
+                )}
               </div>
               <div className="order-last w-full min-w-0 sm:order-none sm:w-auto sm:flex-1">
                 <RowGauge have={type.stock} need={need} />
@@ -252,29 +254,18 @@ function PackDetail({ product, collectionName }) {
           );
         })}
 
-        <div className="mb-1.5 text-[15px] text-faint">
-          Un paquet = {composition}.
-          {orphans.some((o) => o.orphans > 0) && (
-            <>
-              {" "}
-              Les pièces orphelines ne comptent pas dans le stock tant qu'il leur manque leur paire.
-            </>
-          )}
-        </div>
-        <div className="flex w-fit flex-wrap items-baseline gap-x-3 gap-y-1 border border-gold bg-panel2 px-4 py-2.5">
-          <span className="text-[30px] leading-none text-cream">{state.stock}</span>
-          <span className="text-[17px] text-muted">{plural(state.stock)}</span>
-          {orphans
-            .filter((o) => o.orphans > 0)
-            .map((o) => (
-              <span key={o.id} className="flex items-baseline gap-2 border-l border-line pl-3">
-                <span className="text-[22px] leading-none text-muted2">+ {o.orphans}</span>
-                <span className="sub">
-                  {o.orphans === 1 ? "orpheline" : "orphelines"} ({o.name.toLowerCase().replace(/s$/, "")})
-                </span>
-              </span>
-            ))}
-        </div>
+        {/* Trois boîtes : paquets complets, puis chaque sorte (qui ouvre sa fenêtre Ajuster). */}
+        <StockBoxes
+          boxes={[
+            { label: plural(state.stock), note: "complets", value: state.stock },
+            ...product.packTypes.map((type, index) => ({
+              label: type.name,
+              note: orphans[index].orphans > 0 ? `dont ${orphans[index].orphans} ${orphans[index].orphans === 1 ? "seule" : "seules"}` : "en stock",
+              value: type.stock,
+              stockId: type.stockId,
+            })),
+          ]}
+        />
       </section>
       </DetailLayout>
       <SampleNote />

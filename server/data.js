@@ -42,7 +42,7 @@ function readAtelierConfig() {
 
 export async function loadAtelierData() {
   const atelierConfig = readAtelierConfig();
-  const [collectionsRes, productsRes, imagesRes, variantsRes, componentsRes, stockRes] = await Promise.all([
+  const [collectionsRes, productsRes, imagesRes, variantsRes, componentsRes, stockRes, minimumsRes] = await Promise.all([
     readOnly(`SELECT id, name_fr, status FROM collections ORDER BY name_fr`),
     readOnly(`
       SELECT id, collection_id, slug_fr, name_fr, name_en, title_fr, title_en,
@@ -62,6 +62,8 @@ export async function loadAtelierData() {
     readOnly(`SELECT kit_product_id, included_product_id, quantity FROM kit_components ORDER BY kit_product_id, sort_order`),
     // Le stock vit dans la base (migration 014) : une ligne par produit, ou par variante.
     readOnly(`SELECT id, product_id, variant_id, quantity FROM stock`),
+    // Minimums (migration 017) : par produit, ou par variante (étui d'une couleur).
+    readOnly(`SELECT product_id, variant_id, minimum FROM minimums`),
   ]);
 
   const variantsByProduct = {};
@@ -75,8 +77,15 @@ export async function loadAtelierData() {
     if (row.variant_id == null) stockByProduct[row.product_id] = row;
     else stockByVariant[row.variant_id] = row;
   }
+  const minByProduct = {};
+  const minByVariant = {};
+  for (const row of minimumsRes.rows) {
+    if (row.variant_id == null) minByProduct[row.product_id] = row.minimum;
+    else minByVariant[row.variant_id] = row.minimum;
+  }
+
   // Une ligne de stock vue par l'atelier : son id sert aux boutons « Ajuster ».
-  const line = (row) => ({ stockId: row ? String(row.id) : null, stock: row?.quantity ?? 0, min: 0 });
+  const line = (row) => ({ stockId: row ? String(row.id) : null, stock: row?.quantity ?? 0 });
 
   const id = (value) => String(value);
   const kitsRows = productsRes.rows.filter((p) => p.is_kit);
@@ -116,7 +125,7 @@ export async function loadAtelierData() {
         collectionId: id(p.collection_id),
         name: p.name_fr,
         type: "ensemble",
-        objective: ensemble.objective ?? 0,
+        objective: minByProduct[p.id] ?? ensemble.objective ?? 0,
         components: ensemble.components
           .filter((c) => bySlug[c.slug])
           .map((c) => ({ productId: id(bySlug[c.slug].id), qty: c.qty || 1 })),
@@ -131,7 +140,7 @@ export async function loadAtelierData() {
         collectionId: id(p.collection_id),
         name: p.name_fr,
         type: "paquet",
-        min: 0,
+        min: minByProduct[p.id] ?? 0,
         inKit: inAKit.has(id(p.id)),
         packTypes: sorts.map((v) => ({ id: id(v.id), name: `${v.label_fr}s`, ...line(stockByVariant[v.id]) })),
       };
@@ -144,6 +153,7 @@ export async function loadAtelierData() {
       name: p.name_fr,
       type: p.customizable ? "outil" : "piece",
       ...line(row),
+      min: minByProduct[p.id] ?? 0,
       inKit: inAKit.has(id(p.id)),
     };
   });
@@ -152,13 +162,19 @@ export async function loadAtelierData() {
     const variants = colorVariantsOf(k.id);
     // Étuis : une ligne par couleur du kit (stock de la variante de couleur).
     const leather = variants.length
-      ? variants.map((v) => ({ color: v.color, swatch: v.hex_code || "#2a180c", ...line(stockByVariant[v.id]) }))
-      : [{ color: "Étuis", swatch: "#2a180c", ...line(stockByProduct[k.id]) }];
+      ? variants.map((v) => ({
+          variantId: id(v.id),
+          color: v.color,
+          swatch: v.hex_code || "#2a180c",
+          ...line(stockByVariant[v.id]),
+          min: minByVariant[v.id] ?? 0,
+        }))
+      : [{ color: "Étuis", swatch: "#2a180c", ...line(stockByProduct[k.id]), min: 0 }];
     return {
       id: id(k.id),
       collectionId: id(k.collection_id),
       name: k.name_fr,
-      min: 0,
+      min: minByProduct[k.id] ?? 0,
       leather,
       components: kitComponentRows
         .filter((c) => c.kit_product_id === k.id)
