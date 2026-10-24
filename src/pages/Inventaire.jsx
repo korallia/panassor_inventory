@@ -198,14 +198,14 @@ function GroupRows({ collection, kits, rows, collectionNames }) {
       {rows.map((row) => {
         if (row.isKit) return renderKit(row);
         const unit = unitFor(row.product, 2);
-        const Unit = () => (unit ? <span className="ml-1.5 text-[14px] text-faint">{unit}</span> : null);
+        const Unit = () => (unit ? <span className="sub ml-1.5">{unit}</span> : null);
         return (
           <tr key={row.product.id} onClick={() => navigate(`/produits/${row.product.id}`)} className="cursor-pointer hover:bg-gold/8">
             <td className="td">
               <Link to={`/produits/${row.product.id}`} className="text-parch!">
                 {row.name}
               </Link>
-              {collectionNames && <div className="text-[13px] text-faint">{collectionNames[row.product.collectionId]}</div>}
+              {collectionNames && <div className="sub mt-0.5">{collectionNames[row.product.collectionId]}</div>}
             </td>
             <td className="td text-muted2">{typeLabel(row.product, row.inKit)}</td>
             <td className={`td num ${row.status !== "ok" ? "text-alert-soft" : ""}`}>
