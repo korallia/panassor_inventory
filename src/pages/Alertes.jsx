@@ -2,25 +2,14 @@
 //   gauche : les alertes en cours (calculées automatiquement à partir des minimums)
 //   droite : la configuration des rapports planifiés
 // Les minimums se règlent dans la page Minimums ; rien n'est envoyé pour l'instant.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useInventory } from "../store.jsx";
 import { ensembleState, kitsReady, leatherTotal, productState, stockStatus } from "../lib/inventory.js";
-import { PageHeader, SampleNote, StatusPill, Stepper } from "../components/ui.jsx";
+import { PageHeader, SampleNote, Stepper } from "../components/ui.jsx";
 
-const RANK = { out: 0, low: 1, ok: 2 };
 const plural = (n, one, many) => (n === 1 ? one : many);
-
-// Trois façons de compter ce qui manque :
-//   total   : tout ce qu'il faut (réservé pour les kits + minimum libre) − stock
-//   libre   : minimum libre − libres (vente à l'unité)
-//   reserve : ce que les kits devraient réserver − ce qui est réservé
-const TYPES = [
-  { id: "total", label: "Manque total" },
-  { id: "libre", label: "Min. libre" },
-  { id: "reserve", label: "Min. réservé" },
-];
 
 /** Toutes les alertes : kits, étuis (par couleur), outils, ensembles, avec leurs 3 manques. */
 function useAlerts() {
@@ -36,6 +25,8 @@ function useAlerts() {
         status: stockStatus(ready, kit.min),
         name: kit.name,
         units: ["kit", "kits"],
+        have: ready,
+        need: kit.min,
         missing: { total: miss, libre: 0, reserve: miss },
         to: `/kits/${kit.id}`,
         collection: collectionName[kit.collectionId],
@@ -47,6 +38,8 @@ function useAlerts() {
           status: stockStatus(leather.stock, leather.min ?? 0),
           name: `Étuis ${leather.color.toLowerCase()}`,
           units: ["étui", "étuis"],
+          have: leather.stock,
+          need: leather.min ?? 0,
           missing: { total: m, libre: 0, reserve: m },
           to: `/kits/${kit.id}`,
           collection: collectionName[kit.collectionId],
@@ -62,6 +55,8 @@ function useAlerts() {
           status: stockStatus(state.possible, state.objective),
           name: product.name,
           units: ["ensemble", "ensembles"],
+          have: state.possible,
+          need: state.objective,
           missing: { total: m, libre: m, reserve: 0 },
           to: `/produits/${product.id}`,
           collection: collectionName[product.collectionId],
@@ -78,6 +73,8 @@ function useAlerts() {
         status: state.status,
         name: product.name,
         units: product.type === "paquet" ? ["paquet", "paquets"] : null,
+        have: state.stock,
+        need: target + state.min,
         missing: {
           total: Math.max(0, target + state.min - state.stock),
           libre: state.missingForMin,
@@ -91,25 +88,107 @@ function useAlerts() {
   }, [kits, products, collections, productsById, reserved]);
 }
 
-// Une rupture (plus rien en stock) est toujours une alerte, même sans minimum fixé.
-const isAlert = (alert, type) => alert.missing[type] > 0 || alert.status === "out";
+// Une alerte = il en manque, ou il ne reste plus rien (même sans minimum fixé).
+const isAlert = (alert) => alert.missing.total > 0 || alert.have <= 0;
+// Plus c'est loin de la cible (en proportion), plus c'est haut.
+const gap = (alert) => (alert.missing.total > 0 ? alert.missing.total / Math.max(alert.need, 1) : 1);
 
-function missingText(alert, type) {
-  const n = alert.missing[type];
-  if (n === 0 && alert.status === "out") return "Rupture de stock";
+// Urgence = distance à la cible : rouge (plus rien), orange (plus de la moitié manque), jaune (moins de la moitié).
+function worstUrgency(list) {
+  return urgency(list.reduce((w, x) => (gap(x) > gap(w) ? x : w), list[0]));
+}
+
+function urgency(alert) {
+  const g = gap(alert);
+  if (g >= 0.99) return { color: "#e8876f", line: "rgba(155,74,54,.8)", tint: "rgba(232,135,111,.16)" };
+  if (g >= 0.5) return { color: "#e89a4a", line: "rgba(168,101,31,.8)", tint: "rgba(232,154,74,.13)" };
+  return { color: "#e2b04a", line: "rgba(143,107,31,.8)", tint: "rgba(226,176,74,.10)" };
+}
+
+function missingText(alert) {
+  const n = alert.missing.total;
+  if (n === 0) return "Aucun en stock";
   return alert.units ? `Manque ${n} ${plural(n, ...alert.units)}` : `Manque ${n}`;
+}
+
+const BAND_BG = { background: "linear-gradient(90deg,rgba(200,155,60,.16),rgba(200,155,60,.03))" };
+
+function groupByCollection(alerts, collections) {
+  return collections
+    .map((collection) => ({ name: collection.name, alerts: alerts.filter((a) => a.collection === collection.name) }))
+    .filter((group) => group.alerts.length > 0);
+}
+
+function AlertSummary({ alerts, groups, title = "Alertes en cours" }) {
+  return (
+    <div className="border border-gold/40 px-5 py-4" style={BAND_BG}>
+      <div className="flex items-center justify-between gap-4">
+        <span className="sc text-[20px] tracking-[.16em] text-gold-light">{title}</span>
+        <span className="text-[32px] leading-none font-semibold text-cream">{alerts.length}</span>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-x-10 gap-y-2 border-t border-gold/25 pt-4">
+        {groups.map((g) => (
+          <span key={g.name} className="text-[16px] text-muted2">
+            {g.name} <span className="mx-1.5 text-gold">·</span> <span className="font-semibold text-cream">{g.alerts.length}</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CollectionBand({ name, right }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border border-gold/35 px-4 py-2.5" style={BAND_BG}>
+      <span className="text-[21px] font-semibold text-cream">{name}</span>
+      {right && <span className="sc text-[13px] tracking-[.12em] text-gold-light">{right}</span>}
+    </div>
+  );
+}
+
+function AlertGroups({ groups, onOpen }) {
+  return groups.map((group) => (
+    <div key={group.name} className="mt-6 mb-10 last:mb-2">
+      <CollectionBand name={group.name} right={`${group.alerts.length} ${plural(group.alerts.length, "alerte", "alertes")}`} />
+      <div className="border border-t-0 border-gold/35">
+        {group.alerts.map((alert) => {
+          const u = urgency(alert);
+          const Tag = onOpen ? "button" : "div";
+          return (
+            <Tag
+              key={alert.id}
+              {...(onOpen ? { type: "button", onClick: () => onOpen(alert) } : {})}
+              className={`relative flex w-full items-center gap-5 border-0 border-b bg-transparent py-4.5 pr-4 pl-5 text-left ${onOpen ? "cursor-pointer hover:brightness-125" : ""}`}
+              style={{ background: `linear-gradient(90deg, ${u.tint}, rgba(0,0,0,0) 75%)`, borderBottomColor: u.line }}
+            >
+              <span className="absolute top-0 bottom-0 left-0 w-[5px]" style={{ background: u.color }} />
+              <div className="min-w-0 flex-1 text-[19px] text-cream">{alert.name}</div>
+              <div className="w-[90px] shrink-0 text-right text-[19px] text-muted2">
+                <span className="font-semibold" style={{ color: u.color }}>{alert.have}</span>
+                <span className="text-[15px]"> / {alert.need}</span>
+              </div>
+              <div className="w-[190px] shrink-0 whitespace-nowrap text-right text-[17px] font-semibold" style={{ color: u.color }}>
+                {missingText(alert)}
+              </div>
+            </Tag>
+          );
+        })}
+      </div>
+    </div>
+  ));
 }
 
 export default function Alertes() {
   const all = useAlerts();
   const navigate = useNavigate();
-  const [type, setType] = useState("total");
   const [openId, setOpenId] = useState(null);
-  const { reports } = useInventory();
+  const { reports, collections } = useInventory();
   const openReport = reports.find((r) => r.id === openId);
   const alerts = all
-    .filter((a) => isAlert(a, type))
-    .sort((a, b) => RANK[a.status] - RANK[b.status] || b.missing[type] - a.missing[type]);
+    .filter(isAlert)
+    .sort((a, b) => gap(b) - gap(a) || b.missing.total - a.missing.total);
+  // Groupées par collection (dans l'ordre des collections), les plus loin de la cible d'abord.
+  const groups = groupByCollection(alerts, collections);
 
   return (
     <div className="flex flex-col gap-8">
@@ -118,56 +197,13 @@ export default function Alertes() {
       <div className="grid w-full items-start justify-center gap-8 lg:grid-cols-[minmax(0,620px)_minmax(0,480px)] lg:gap-12">
         <div className="flex min-w-0 flex-col gap-8">
         <section className="flex min-w-0 flex-col gap-2 border border-line/50 bg-panel/60 px-6 py-5">
-          <div className="flex flex-wrap items-baseline justify-between gap-3">
-            <div className="sc text-[16px] tracking-[.16em] text-gold">Alertes en cours</div>
-            <div className="sub">ruptures + minimums</div>
+          <div className="border-b border-line/35 pb-8">
+            {alerts.length > 0 && <AlertSummary alerts={alerts} groups={groups} />}
           </div>
-          <div role="tablist" aria-label="Type de manque" className="flex flex-wrap border-b border-line/50">
-            {TYPES.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                role="tab"
-                aria-selected={type === t.id}
-                onClick={() => setType(t.id)}
-                className={`sc h-10 cursor-pointer border-0 border-b-2 bg-transparent px-3 text-[13px] tracking-[.12em] ${
-                  type === t.id ? "border-gold text-cream" : "border-transparent text-muted2 hover:text-cream"
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-          {alerts.length === 0 && <div className="border-t border-line/35 py-6 text-center text-[18px] text-ok">Aucune rupture, tout est au-dessus du minimum.</div>}
-          {alerts.map((alert) => (
-            <button
-              key={alert.id}
-              type="button"
-              onClick={() => navigate(alert.to)}
-              className="flex w-full cursor-pointer items-center gap-5 border-0 border-t border-line/35 bg-transparent py-3 text-left hover:bg-gold/5"
-            >
-              <div className="w-[130px] shrink-0">
-                <StatusPill status={alert.status === "ok" ? "low" : alert.status} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-[19px] text-cream">{alert.name}</div>
-                <div className="sub mt-0.5">{alert.collection}</div>
-              </div>
-              <div className="text-right text-[17px] text-alert-soft">{missingText(alert, type)}</div>
-            </button>
-          ))}
-          <div className="mt-2 flex w-fit flex-wrap items-baseline gap-x-3 gap-y-1 border border-gold bg-panel2 px-4 py-2.5">
-            <span className="text-[30px] leading-none text-cream">{alerts.length}</span>
-            <span className="text-[17px] text-muted">{alerts.length === 1 ? "alerte" : "alertes"}</span>
-            {alerts.some((a) => a.status === "out") && (
-              <span className="flex items-baseline gap-2 border-l border-line pl-3">
-                <span className="text-[22px] leading-none text-alert-soft">{alerts.filter((a) => a.status === "out").length}</span>
-                <span className="text-[16px] text-alert-muted">en rupture</span>
-              </span>
-            )}
-          </div>
+          {alerts.length === 0 && <div className="border-t border-line/35 py-6 text-center text-[18px] text-ok">Aucune alerte, tout est au-dessus du minimum.</div>}
+          <AlertGroups groups={groups} onOpen={(alert) => navigate(alert.to)} />
         </section>
-        {openReport && <ReportPreview report={openReport} />}
+        {openReport && <PreviewModal onClose={() => setOpenId(null)}><ReportPreview report={openReport} /></PreviewModal>}
         </div>
 
         <Reports openId={openId} setOpenId={setOpenId} />
@@ -372,56 +408,93 @@ function ReportItem({ report, open, onToggleOpen, update, remove }) {
 }
 
 /** Aperçu du message tel qu'il partirait (Discord ou courriel), avec les données actuelles. */
+function PreviewModal({ onClose, children }) {
+  useEffect(() => {
+    const onKey = (e) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 sm:py-10" onClick={onClose}>
+      <div className="relative w-full max-w-[760px] shadow-[0_20px_60px_#000]" onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Fermer"
+          className="absolute top-3 right-3 z-10 h-8 w-8 cursor-pointer border border-line bg-ink text-[18px] text-muted2 hover:text-cream"
+        >
+          ×
+        </button>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function ReportPreview({ report }) {
   const all = useAlerts();
   const { kits, products, collections, productsById, reserved } = useInventory();
-  const alerts = all.filter((a) => isAlert(a, "total")).sort((a, b) => RANK[a.status] - RANK[b.status] || b.missing.total - a.missing.total);
+  const alerts = all.filter(isAlert).sort((a, b) => gap(b) - gap(a) || b.missing.total - a.missing.total);
+  const groups = groupByCollection(alerts, collections);
   const today = new Date().toLocaleDateString("fr-CA", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   const has = (id) => report.sections.includes(id);
+  // Même couleur que les alertes : vert si atteint, sinon selon la distance au minimum.
+  const tone = (have, need) =>
+    have >= need ? "#9fc7a4" : urgency({ have, need, missing: { total: need - have } }).color;
 
   return (
     <section className="flex flex-col border border-gold/70 bg-ink">
       {/* En-tête du message */}
-      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-gold/60 px-6 py-5" style={{ background: "linear-gradient(180deg,#1a1109 0%,#0d0805 100%)" }}>
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-gold/60 px-7 py-6 pr-14" style={{ background: "linear-gradient(180deg,#1a1109 0%,#0d0805 100%)" }}>
         <div>
           <div className="eyebrow">Aperçu du message</div>
-          <div className="sc mt-1 text-[24px] text-cream">{report.name}</div>
+          <div className="sc mt-1 text-[26px] text-cream">{report.name}</div>
           <div className="text-[15px] text-muted2">{today}</div>
         </div>
         <div className="sc border border-line px-3 py-1 text-[13px] tracking-[.12em] text-gold-light">{report.channel}</div>
       </div>
 
-      <div className="flex flex-col gap-6 px-6 py-5">
+      <div className="flex flex-col px-7 py-6 [&>*+*]:mt-10 [&>*+*]:pt-10 [&>*+*]:[background:linear-gradient(90deg,rgba(200,155,60,0),rgba(200,155,60,.8),rgba(200,155,60,0))_top/100%_1px_no-repeat]">
         {has("alertes") && (
-          <PreviewBlock title="Alertes" count={alerts.length}>
+          <MsgSection title="Alertes" count={alerts.length}>
             {alerts.length === 0 ? (
-              <div className="text-[16px] text-ok">Tout est au-dessus du minimum.</div>
+              <div className="pt-2 text-[17px] text-ok">Tout est au-dessus du minimum.</div>
             ) : (
-              alerts.map((a) => (
-                <div key={a.id} className="flex items-center gap-4 border-t border-line/30 py-2 first:border-t-0">
-                  <div className="w-[120px] shrink-0">
-                    <StatusPill status={a.status === "ok" ? "low" : a.status} />
-                  </div>
-                  <div className="min-w-0 flex-1 text-[17px] text-cream">
-                    {a.name} <span className="sub">· {a.collection}</span>
-                  </div>
-                  <div className="text-[16px] text-alert-soft">{missingText(a, "total")}</div>
-                </div>
+              groups.map((g) => (
+                <MsgGroup key={g.name} name={g.name} count={g.alerts.length}>
+                  {g.alerts.map((a) => {
+                    const color = urgency(a).color;
+                    return (
+                      <MsgRow key={a.id} color={color} name={a.name}>
+                        <span className="w-[64px] shrink-0 text-right text-[16px] text-muted2">
+                          <span className="font-semibold" style={{ color }}>{a.have}</span> / {a.need}
+                        </span>
+                        <span className="w-[170px] shrink-0 text-right text-[16px] whitespace-nowrap" style={{ color }}>
+                          {missingText(a)}
+                        </span>
+                      </MsgRow>
+                    );
+                  })}
+                </MsgGroup>
               ))
             )}
-          </PreviewBlock>
+          </MsgSection>
         )}
 
         {has("kits") && (
-          <PreviewBlock title="Kits prêts">
-            <div className="grid gap-3 sm:grid-cols-3">
+          <MsgSection title="Kits prêts">
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
               {kits.map((kit) => {
                 const ready = kitsReady(kit, productsById);
-                const low = ready < kit.min;
+                const color = tone(ready, kit.min);
                 return (
-                  <div key={kit.id} className={`border px-4 py-3 ${low ? "border-alert-line bg-alert-bg" : "border-ok-line bg-[#0e1a10]"}`}>
-                    <div className="text-[15px] text-muted">{kit.name}</div>
-                    <div className={`text-[32px] leading-tight ${low ? "text-alert-soft" : "text-[#cfe5d2]"}`}>{ready}</div>
+                  <div
+                    key={kit.id}
+                    className="border border-line/60 px-4 pt-3 pb-4 text-center"
+                    style={{ borderTop: `3px solid ${color}`, background: "linear-gradient(180deg,rgba(200,155,60,.08),rgba(0,0,0,0))" }}
+                  >
+                    <div className="text-[16px] text-muted">{kit.name}</div>
+                    <div className="mt-1 text-[36px] leading-tight font-semibold" style={{ color }}>{ready}</div>
                     <div className="sub">
                       minimum <span className="sub-num">{kit.min}</span>
                     </div>
@@ -429,15 +502,15 @@ function ReportPreview({ report }) {
                 );
               })}
             </div>
-          </PreviewBlock>
+          </MsgSection>
         )}
 
         {has("stock") && (
-          <PreviewBlock title="Stock libre">
-            <div className="flex flex-col gap-4">
+          <MsgSection title="Stock libre">
+            <div className="mt-3 flex flex-col">
               {collections.map((c) => (
-                <div key={c.id}>
-                  <div className="sc mb-1 text-[13px] tracking-[.14em] text-gold-light">{c.name}</div>
+                <div key={c.id} className="border-gold/45 py-5 first:pt-2 [&+&]:border-t">
+                  <div className="sc mb-2 text-[16px] tracking-[.14em] text-gold-light">{c.name}</div>
                   <div className="grid gap-x-8 sm:grid-cols-2">
                     {products
                       .filter((p) => p.collectionId === c.id && p.type !== "ensemble")
@@ -471,26 +544,48 @@ function ReportPreview({ report }) {
                 </div>
               ))}
             </div>
-          </PreviewBlock>
+          </MsgSection>
         )}
 
         {report.sections.length === 0 && <div className="sub">Coche au moins un contenu.</div>}
       </div>
 
-      <div className="sub border-t border-line/40 px-6 py-3">
+      <div className="sub border-t border-line/40 px-7 py-4">
         Envoyé automatiquement par Panassor · Atelier · {scheduleText(report).toLowerCase()}
       </div>
     </section>
   );
 }
 
-function PreviewBlock({ title, count, children }) {
+function MsgSection({ title, count, children }) {
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-baseline gap-3 border-b border-gold/50 pb-1.5">
-        <span className="sc text-[16px] tracking-[.16em] text-gold">{title}</span>
-        {count !== undefined && <span className="sub-num">{count}</span>}
+    <div>
+      <div className="flex items-baseline gap-3 border-b border-gold/50 pb-2">
+        <span className="sc text-[21px] tracking-[.16em] text-gold-light">{title}</span>
+        {count !== undefined && <span className="text-[21px] font-semibold text-cream">{count}</span>}
       </div>
+      {children}
+    </div>
+  );
+}
+
+function MsgGroup({ name, count, children }) {
+  return (
+    <div className="mt-5">
+      <div className="sc mb-1 text-[13px] tracking-[.14em] text-gold-light">
+        {name}
+        {count !== undefined && <span className="text-faint"> · {count}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function MsgRow({ color, name, children }) {
+  return (
+    <div className="flex items-baseline gap-3 py-1">
+      {color && <span className="h-2 w-2 shrink-0 -translate-y-0.5 rounded-full" style={{ background: color }} />}
+      <span className="min-w-0 flex-1 text-[17px] text-cream">{name}</span>
       {children}
     </div>
   );

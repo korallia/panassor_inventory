@@ -2,7 +2,7 @@
 // (table products + product_images du site), simplifiée. On clique sur une
 // ligne pour ouvrir sa fiche : textes FR / EN, prix et images modifiables.
 // Rien n'est envoyé au site ni à Square pour l'instant.
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 
 import { useInventory } from "../store.jsx";
 import { PageHeader, SampleNote } from "../components/ui.jsx";
@@ -17,17 +17,24 @@ export default function Catalogue() {
   const { catalog, collections, dispatch, readOnly } = useInventory();
   const [openId, setOpenId] = useState(null);
   const [query, setQuery] = useState("");
+  const [view, setView] = useState("cartes"); // "cartes" | "tableau"
+  const [collectionId, setCollectionId] = useState("all");
+  const [column, setColumn] = useState(null); // { key, dir } pour le tableau
+  const clickColumn = (key) =>
+    setColumn((current) => ({ key, dir: current?.key === key && current.dir === "asc" ? "desc" : "asc" }));
   const needle = query.trim().toLowerCase();
+  const openEntry = catalog.find((e) => e.id === openId);
   const toggle = useCallback((id) => setOpenId((current) => (current === id ? null : id)), []);
   const groups = useMemo(() => {
     const matches = (e) => !needle || `${e.nameFr} ${e.nameEn}`.toLowerCase().includes(needle);
     return collections
+      .filter((collection) => collectionId === "all" || collection.id === collectionId)
       .map((collection) => {
         const entries = catalog.filter((e) => e.collectionId === collection.id && matches(e));
         return { collection, entries: [...entries.filter((e) => e.isKit), ...entries.filter((e) => !e.isKit)] };
       })
       .filter((g) => g.entries.length);
-  }, [catalog, collections, needle]);
+  }, [catalog, collections, needle, collectionId]);
 
   function addEntry() {
     const id = `nouveau-${Date.now()}`;
@@ -71,137 +78,304 @@ export default function Catalogue() {
         </div>
       </PageHeader>
 
-      <div className="mx-auto flex w-full max-w-[1150px] flex-col border border-line/50 bg-panel/60">
-        {groups.map(({ collection, entries }) =>
-          entries.map((entry) => (
-            <CatalogRow
-              key={entry.id}
-              entry={entry}
-              collectionName={collection.name}
-              open={openId === entry.id}
-              onToggle={toggle}
-              dispatch={dispatch}
-              collections={collections}
-              readOnly={readOnly}
-            />
-          ))
-        )}
+      <div className="mx-auto flex w-full max-w-[1150px] flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-wrap gap-2" role="tablist" aria-label="Collection">
+          {[{ id: "all", name: "Toutes" }, ...collections].map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              role="tab"
+              aria-selected={collectionId === c.id}
+              onClick={() => setCollectionId(c.id)}
+              className={`cursor-pointer border px-4 py-2 text-[16px] ${
+                collectionId === c.id ? "border-gold bg-gold/15 text-cream" : "border-line bg-transparent text-muted2 hover:text-cream"
+              }`}
+            >
+              {c.name}
+            </button>
+          ))}
+        </div>
+        <div className="flex border border-line" role="tablist" aria-label="Affichage">
+          {[
+            ["cartes", "Cartes"],
+            ["tableau", "Tableau"],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={view === value}
+              onClick={() => setView(value)}
+              className={`sc cursor-pointer border-0 px-5 py-2 text-[13px] tracking-[.14em] ${
+                view === value ? "bg-gold/20 text-cream" : "bg-transparent text-muted2 hover:text-cream"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
+
+      {view === "tableau" ? (
+        <CatalogTable groups={groups} column={column} onColumn={clickColumn} onOpen={toggle} />
+      ) : (
+        <div className="mx-auto flex w-full max-w-[1150px] flex-col gap-10">
+        {groups.length === 0 && <div className="sub py-10 text-center">Aucun produit ne correspond.</div>}
+        {groups.map(({ collection, entries }) => (
+          <section key={collection.id}>
+            <div
+              className="flex items-center justify-between gap-4 border border-gold/35 px-5 py-3"
+              style={{ background: "linear-gradient(90deg,rgba(200,155,60,.16),rgba(200,155,60,.03))" }}
+            >
+              <span className="text-[24px] font-semibold text-cream">{collection.name}</span>
+              <span className="sc text-[13px] tracking-[.12em] text-gold-light">
+                {entries.length} {entries.length > 1 ? "produits" : "produit"}
+              </span>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
+              {entries.map((entry) => (
+                <CatalogCard key={entry.id} entry={entry} onOpen={toggle} />
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+      )}
+      {openEntry && (
+        <EntryModal
+          entry={openEntry}
+          onClose={() => setOpenId(null)}
+          dispatch={dispatch}
+          collections={collections}
+          readOnly={readOnly}
+        />
+      )}
       <SampleNote />
     </div>
   );
 }
 
-// Ligne mémorisée : elle ne se redessine que si SON produit change (pas à chaque frappe ailleurs).
-const CatalogRow = memo(function CatalogRow({ entry, collectionName, open, onToggle, dispatch, collections, readOnly }) {
-  const update = useCallback((patch) => dispatch({ type: "updateCatalog", id: entry.id, patch }), [dispatch, entry.id]);
-  const [confirming, setConfirming] = useState(false);
-  const img = mainImage(entry);
+const COLUMNS = [
+  { key: "name", label: "Produit", value: (r) => r.entry.nameFr },
+  { key: "type", label: "Type", value: (r) => (r.entry.isKit ? "Kit" : TYPE_LABELS[r.entry.type] ?? "") },
+  { key: "collection", label: "Collection", value: (r) => r.rank },
+  { key: "photos", label: "Photos", num: true, value: (r) => r.entry.images.length },
+  { key: "price", label: "Prix", num: true, value: (r) => (r.entry.price ? Number(String(r.entry.price).replace(",", ".")) : null) },
+];
 
+function CatalogTable({ groups, column, onColumn, onOpen }) {
+  const rows = groups.flatMap(({ collection, entries }, rank) => entries.map((entry) => ({ entry, collection, rank })));
+  const active = column && COLUMNS.find((c) => c.key === column.key);
+  if (active) {
+    const order = (a, b) => {
+      const x = active.value(a);
+      const y = active.value(b);
+      if (x == null || y == null) return x == null ? (y == null ? 0 : 1) : -1;
+      const diff = typeof x === "string" ? x.localeCompare(y, "fr") : x - y;
+      return column.dir === "desc" ? -diff : diff;
+    };
+    rows.sort((a, b) => order(a, b) || a.rank - b.rank || a.entry.nameFr.localeCompare(b.entry.nameFr, "fr"));
+  }
   return (
-    <div className="border-t border-line/35 first:border-t-0">
-      <div
-        role="button"
-        tabIndex={0}
-        aria-expanded={open}
-        onClick={() => onToggle(entry.id)}
-        onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onToggle(entry.id))}
-        className={`flex cursor-pointer items-center gap-4 px-5 py-3 hover:bg-gold/5 ${open ? "bg-gold/8" : ""}`}
-        style={entry.isKit ? { background: "linear-gradient(90deg,rgba(200,155,60,.16),rgba(200,155,60,.03))" } : undefined}
-      >
-        <Thumb url={img?.url} size={56} />
-        <div className="min-w-0 flex-1">
-          <div className={entry.isKit ? "text-[22px] font-semibold text-cream" : "text-[19px] text-cream"}>{entry.nameFr}</div>
-          <div className="sub mt-0.5 flex flex-wrap items-center gap-2">
-            {entry.nameEn || "— nom anglais à remplir"}
+    <div className="mx-auto w-full max-w-[1150px] overflow-x-auto border border-line bg-panel">
+      <table className="w-full min-w-[760px] border-collapse">
+        <thead>
+          <tr>
+            <th className="th w-[76px]" />
+            {COLUMNS.map((c) => {
+              const on = column?.key === c.key;
+              return (
+                <th key={c.key} className={`th ${c.num ? "num" : ""}`} aria-sort={on ? (column.dir === "asc" ? "ascending" : "descending") : undefined}>
+                  <button
+                    type="button"
+                    onClick={() => onColumn(c.key)}
+                    className={`inline-flex cursor-pointer items-center gap-1.5 border-0 bg-transparent p-0 font-[inherit] tracking-[inherit] uppercase ${
+                      on ? "text-cream" : "text-gold hover:text-gold-light"
+                    }`}
+                  >
+                    {c.label}
+                    <span className={`text-[10px] ${on ? "text-gold" : "text-faint"}`}>{on ? (column.dir === "asc" ? "▲" : "▼") : "▲▼"}</span>
+                  </button>
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(({ entry, collection }) => {
+            const img = mainImage(entry);
+            return (
+              <tr
+                key={entry.id}
+                onClick={() => onOpen(entry.id)}
+                className="cursor-pointer even:bg-[#1a120a] hover:bg-gold/10!"
+                style={entry.isKit ? { background: "linear-gradient(90deg,rgba(200,155,60,.16),rgba(200,155,60,.03))" } : undefined}
+              >
+                <td className="td py-2!">
+                  <Thumb url={img?.url} size={48} />
+                </td>
+                <td className="td">
+                  <div className={entry.isKit ? "text-[21px] font-semibold text-cream" : "text-[18px] text-cream"}>{entry.nameFr}</div>
+                  <div className="sub mt-0.5">{entry.nameEn || <span className="text-alert-soft/70">nom anglais à remplir</span>}</div>
+                </td>
+                <td className="td text-[16px] text-muted">{entry.isKit ? "Kit" : TYPE_LABELS[entry.type] ?? ""}</td>
+                <td className="td text-[16px] text-muted">{collection.name}</td>
+                <td className={`td num text-[17px] ${entry.images.length ? "text-cream" : "text-faint"}`}>{entry.images.length || "—"}</td>
+                <td className="td num text-[18px] text-cream tabular-nums">{entry.price ? `${entry.price} $` : <span className="text-faint">—</span>}</td>
+              </tr>
+            );
+          })}
+          {rows.length === 0 && (
+            <tr>
+              <td className="td sub py-8! text-center" colSpan={COLUMNS.length + 1}>
+                Aucun produit ne correspond.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// Carte mémorisée : elle ne se redessine que si SON produit change.
+const CatalogCard = memo(function CatalogCard({ entry, onOpen }) {
+  const img = mainImage(entry);
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(entry.id)}
+      className={`group flex cursor-pointer flex-col border bg-ink p-0 text-left hover:border-gold ${entry.isKit ? "border-gold" : "border-line/70"}`}
+    >
+      <CardImage url={img?.url} />
+      <div className="border-t border-line/50 px-3.5 py-3" style={entry.isKit ? { background: "linear-gradient(90deg,rgba(200,155,60,.14),rgba(200,155,60,.02))" } : undefined}>
+        <div className={`text-[18px] leading-snug text-cream ${entry.isKit ? "font-semibold" : ""}`}>{entry.nameFr}</div>
+        <div className="mt-1 flex items-baseline justify-between gap-2">
+          <span className="sub flex items-center gap-2">
+            {entry.isKit ? "Kit" : TYPE_LABELS[entry.type] ?? ""}
             {(entry.variants || []).length > 0 && (
-              <span className="flex items-center gap-1" title={`${entry.variants.length} variantes`}>
+              <span className="flex items-center gap-1">
                 {entry.variants.map((v) => (
-                  <span key={v.color} className="inline-block h-3 w-3 border border-line" style={{ background: v.swatch }} />
+                  <span key={v.color} className="inline-block h-2.5 w-2.5 border border-line" style={{ background: v.swatch }} />
                 ))}
               </span>
             )}
-          </div>
-        </div>
-        <div className="hidden w-[160px] text-[15px] text-muted2 md:block">
-          {entry.isKit ? "Kit complet" : TYPE_LABELS[entry.type] ?? ""}
-          <div className="sub mt-0.5">{collectionName}</div>
-        </div>
-        <div className="w-[90px] text-right text-[18px] text-cream tabular-nums">{entry.price ? `${entry.price} $` : <span className="text-faint">—</span>}</div>
-        {!readOnly && <button
-          type="button"
-          aria-label={`Retirer ${entry.nameFr}`}
-          title="Retirer ce produit"
-          onClick={(e) => {
-            e.stopPropagation();
-            setConfirming(true);
-          }}
-          className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center border border-line bg-transparent text-[18px] leading-none text-muted2 hover:border-alert-line hover:text-alert"
-        >
-          ×
-        </button>}
-      </div>
-
-      {confirming && (
-        <div className="flex items-center justify-between gap-3 border-t border-alert-line bg-alert-bg px-5 py-2 text-[15px]">
-          <span className="text-alert-soft">Retirer « {entry.nameFr} » du catalogue ?</span>
-          <span className="flex gap-2">
-            <button type="button" className="btn-ghost h-8! px-3! text-[13px]!" onClick={() => setConfirming(false)}>
-              Annuler
-            </button>
-            <button
-              type="button"
-              className="sc h-8 cursor-pointer border border-alert-line bg-[#9b4a36] px-3 text-[13px] tracking-[.1em] text-cream"
-              onClick={() => dispatch({ type: "removeCatalog", id: entry.id })}
-            >
-              Retirer
-            </button>
           </span>
+          <span className="text-[17px] text-cream tabular-nums">{entry.price ? `${entry.price} $` : <span className="text-faint">—</span>}</span>
         </div>
-      )}
+      </div>
+    </button>
+  );
+});
 
-      {open && (
-        <div className="flex min-w-0 flex-col gap-5 border-t border-gold/50 bg-ink/60 px-5 py-5">
-        <Images entry={entry} update={update} readOnly={readOnly} />
-        {(entry.variants || []).some((v) => v.priceDelta) && <Variants entry={entry} update={update} readOnly={readOnly} />}
-        <fieldset disabled={readOnly} className="m-0 flex min-w-0 flex-col gap-5 border-0 p-0">
-          {readOnly && <div className="text-[14px] text-gold-light">Lecture seule pour l'instant : les modifications viendront avec l'écriture dans la base.</div>}
-          <div className="grid gap-x-6 gap-y-3 md:grid-cols-2">
-            <ColumnTitle>Français</ColumnTitle>
-            <ColumnTitle className="hidden md:block">Anglais</ColumnTitle>
-            <Text label="Nom" value={entry.nameFr} onChange={(v) => update({ nameFr: v })} />
-            <Text label="Name" value={entry.nameEn} onChange={(v) => update({ nameEn: v })} />
-            <Text label="Titre" value={entry.titleFr} onChange={(v) => update({ titleFr: v })} />
-            <Text label="Title" value={entry.titleEn} onChange={(v) => update({ titleEn: v })} />
-            <Text area label="Description courte" value={entry.descriptionFr} onChange={(v) => update({ descriptionFr: v })} />
-            <Text area label="Short description" value={entry.descriptionEn} onChange={(v) => update({ descriptionEn: v })} />
-            <Text area tall label="Description longue" value={entry.longDescriptionFr} onChange={(v) => update({ longDescriptionFr: v })} />
-            <Text area tall label="Long description" value={entry.longDescriptionEn} onChange={(v) => update({ longDescriptionEn: v })} />
-          </div>
-
-          <div className="grid gap-x-6 gap-y-3 md:grid-cols-2">
-            <label className="flex flex-col gap-1.5">
-              <span className="lbl">Prix ($)</span>
-              <input className="field" inputMode="decimal" placeholder="40,00" value={entry.price} onChange={(e) => update({ price: e.target.value })} />
-            </label>
-            <label className="flex flex-col gap-1.5">
-              <span className="lbl">Collection</span>
-              <select className="field bg-panel2!" value={entry.collectionId} onChange={(e) => update({ collectionId: e.target.value })}>
-                {collections.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-        </fieldset>
-        </div>
+function CardImage({ url }) {
+  const [broken, setBroken] = useState(false);
+  return (
+    <div className="flex aspect-square w-full items-center justify-center overflow-hidden" style={{ background: "linear-gradient(135deg,#2a1d0e,#0d0805)" }}>
+      {url && !broken ? (
+        <img src={assetUrl(url, 500)} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" onError={() => setBroken(true)} />
+      ) : (
+        <span className="sub">{url ? "Image introuvable" : "Aucune photo"}</span>
       )}
     </div>
   );
-});
+}
+
+// Fiche du produit, en fenêtre par-dessus la page.
+function EntryModal({ entry, onClose, dispatch, collections, readOnly }) {
+  const update = useCallback((patch) => dispatch({ type: "updateCatalog", id: entry.id, patch }), [dispatch, entry.id]);
+  const [confirming, setConfirming] = useState(false);
+  const collectionName = collections.find((c) => c.id === entry.collectionId)?.name;
+  useEffect(() => {
+    const onKey = (e) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 sm:py-10" onClick={onClose}>
+      <div className="relative w-full max-w-[1000px] border border-gold/70 bg-panel shadow-[0_20px_60px_#000]" onClick={(e) => e.stopPropagation()}>
+        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-gold/60 px-7 py-6 pr-16" style={{ background: "linear-gradient(180deg,#1a1109 0%,#0d0805 100%)" }}>
+          <div>
+            <div className="eyebrow">{entry.isKit ? "Kit" : TYPE_LABELS[entry.type] ?? "Produit"}</div>
+            <div className="mt-1 text-[28px] font-semibold text-cream">{entry.nameFr}</div>
+            <div className="sub mt-1">{[entry.nameEn || "nom anglais à remplir", collectionName].filter(Boolean).join(" · ")}</div>
+          </div>
+          {!readOnly && !confirming && (
+            <button type="button" className="btn-ghost hover:border-alert-line! hover:text-alert!" onClick={() => setConfirming(true)}>
+              × Retirer du catalogue
+            </button>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Fermer"
+          className="absolute top-3 right-3 h-8 w-8 cursor-pointer border border-line bg-ink text-[18px] text-muted2 hover:text-cream"
+        >
+          ×
+        </button>
+
+        {confirming && (
+          <div className="flex items-center justify-between gap-3 border-b border-alert-line bg-alert-bg px-7 py-3 text-[16px]">
+            <span className="text-alert-soft">Retirer « {entry.nameFr} » du catalogue ?</span>
+            <span className="flex gap-2">
+              <button type="button" className="btn-ghost h-8! px-3! text-[13px]!" onClick={() => setConfirming(false)}>
+                Annuler
+              </button>
+              <button
+                type="button"
+                className="sc h-8 cursor-pointer border border-alert-line bg-[#9b4a36] px-3 text-[13px] tracking-[.1em] text-cream"
+                onClick={() => {
+                  dispatch({ type: "removeCatalog", id: entry.id });
+                  onClose();
+                }}
+              >
+                Retirer
+              </button>
+            </span>
+          </div>
+        )}
+
+        <div className="flex min-w-0 flex-col gap-7 px-7 py-6">
+          <Images entry={entry} update={update} readOnly={readOnly} />
+          {(entry.variants || []).some((v) => v.priceDelta) && <Variants entry={entry} update={update} readOnly={readOnly} />}
+          <fieldset disabled={readOnly} className="m-0 flex min-w-0 flex-col gap-5 border-0 p-0">
+            {readOnly && <div className="text-[14px] text-gold-light">Lecture seule pour l'instant : les modifications viendront avec l'écriture dans la base.</div>}
+            <div className="grid gap-x-6 gap-y-3 md:grid-cols-2">
+              <ColumnTitle>Français</ColumnTitle>
+              <ColumnTitle className="hidden md:block">Anglais</ColumnTitle>
+              <Text label="Nom" value={entry.nameFr} onChange={(v) => update({ nameFr: v })} />
+              <Text label="Name" value={entry.nameEn} onChange={(v) => update({ nameEn: v })} />
+              <Text label="Titre" value={entry.titleFr} onChange={(v) => update({ titleFr: v })} />
+              <Text label="Title" value={entry.titleEn} onChange={(v) => update({ titleEn: v })} />
+              <Text area label="Description courte" value={entry.descriptionFr} onChange={(v) => update({ descriptionFr: v })} />
+              <Text area label="Short description" value={entry.descriptionEn} onChange={(v) => update({ descriptionEn: v })} />
+              <Text area tall label="Description longue" value={entry.longDescriptionFr} onChange={(v) => update({ longDescriptionFr: v })} />
+              <Text area tall label="Long description" value={entry.longDescriptionEn} onChange={(v) => update({ longDescriptionEn: v })} />
+            </div>
+            <div className="grid gap-x-6 gap-y-3 md:grid-cols-2">
+              <label className="flex flex-col gap-1.5">
+                <span className="lbl">Prix ($)</span>
+                <input className="field" inputMode="decimal" placeholder="40,00" value={entry.price} onChange={(e) => update({ price: e.target.value })} />
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="lbl">Collection</span>
+                <select className="field bg-panel2!" value={entry.collectionId} onChange={(e) => update({ collectionId: e.target.value })}>
+                  {collections.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </fieldset>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /** Sous-produits : variantes de couleur avec leur prix (prix de base + écart) et leur stock. */
 function Variants({ entry, update, readOnly }) {
