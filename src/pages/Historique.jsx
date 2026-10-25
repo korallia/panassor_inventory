@@ -1,7 +1,7 @@
 // Historique : tous les mouvements de stock (qui, quoi, combien, pourquoi).
 // Filtres : raison, personne, période, et recherche par pièce.
 // Les mouvements viennent de la table stock_movements (migration 017).
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useInventory } from "../store.jsx";
@@ -11,11 +11,30 @@ import { REASON_LABELS } from "../components/Ajuster.jsx";
 const dateTime = (iso) =>
   new Date(iso).toLocaleString("fr-CA", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).replace(".", "");
 
+// Nom court d'une personne (avant le @), sauf si deux comptes partagent ce début :
+// on montre alors l'adresse complète pour les distinguer.
+function personNamer(people) {
+  const count = {};
+  for (const email of people) {
+    const local = email.split("@")[0];
+    count[local] = (count[local] || 0) + 1;
+  }
+  return (email) => {
+    if (!email) return "Square";
+    const local = email.split("@")[0];
+    return count[local] > 1 ? email : local;
+  };
+}
+
 export default function Historique() {
   const { source, loadedAt, error } = useInventory();
   const [filters, setFilters] = useState({ raison: "", personne: "", du: "", au: "" });
   const [query, setQuery] = useState("");
   const [data, setData] = useState({ movements: [], people: [] });
+  const personName = useMemo(
+    () => personNamer([...new Set([...data.people, ...data.movements.map((m) => m.person).filter(Boolean)])]),
+    [data]
+  );
   const [status, setStatus] = useState("chargement");
   const [open, setOpen] = useState(null);
 
@@ -80,7 +99,7 @@ export default function Historique() {
                 <option value="">Tout le monde</option>
                 {data.people.map((email) => (
                   <option key={email} value={email}>
-                    {email.split("@")[0]}
+                    {personName(email)}
                   </option>
                 ))}
                 <option value="square">Square (ventes)</option>
@@ -137,7 +156,7 @@ export default function Historique() {
                     <td className="td">
                       <span className="sub text-[13px]! text-gold!">{REASON_LABELS[m.reason] || m.reason}</span>
                     </td>
-                    <td className="td text-[16px]! text-muted">{m.person ? m.person.split("@")[0] : "Square"}</td>
+                    <td className="td text-[16px]! text-muted">{personName(m.person)}</td>
                     <td className="td max-w-[260px] text-[15px]! text-muted2 italic">{m.note || ""}</td>
                   </tr>
                 ))}
@@ -147,7 +166,7 @@ export default function Historique() {
             {status === "erreur" && <div className="px-4 py-5 text-[15px] text-alert">Lecture de l'historique impossible.</div>}
             {status === "pret" && rows.length === 0 && <div className="sub px-4 py-5">Aucun mouvement pour ces filtres.</div>}
           </div>
-          {open && <Detail movement={open} onClose={() => setOpen(null)} />}
+          {open && <Detail movement={open} onClose={() => setOpen(null)} personName={personName} />}
           {data.movements.length >= 300 && <div className="sub">Les 300 derniers mouvements : affine les filtres pour voir plus loin.</div>}
         </>
       )}
@@ -161,7 +180,7 @@ const fullDate = (iso) =>
   });
 
 // Détail d'un mouvement : même fenêtre que Ajuster (avant / mouvement / après).
-function Detail({ movement: m, onClose }) {
+function Detail({ movement: m, onClose, personName }) {
   useEffect(() => {
     const onKey = (event) => event.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -172,7 +191,7 @@ function Detail({ movement: m, onClose }) {
   const box = "flex flex-col items-center gap-2 border bg-ink px-4 py-5";
   const info = [
     ["Raison", REASON_LABELS[m.reason] || m.reason],
-    ["Par", m.person ? m.person.split("@")[0] : "Square"],
+    ["Par", personName(m.person)],
     ["Collection", m.collection || "—"],
     ["Le", fullDate(m.at)],
   ];
