@@ -141,11 +141,11 @@ function PieceDetail({ product, collectionName }) {
         }
       >
         <section className="flex flex-col gap-2 border border-line/50 bg-panel/60 px-6 py-5">
-          <div className="flex flex-wrap items-baseline justify-between gap-3">
-            <div className="sc text-[16px] tracking-[.16em] text-gold">Pièces en stock</div>
+          <div className="flex items-baseline justify-between gap-3">
+            <div className="sc text-[16px] tracking-[.16em] whitespace-nowrap text-gold">Pièces en stock</div>
             {/* Petites capitales comme « pour les kits », chiffres en Garamond, un ton plus clair, pour bien les lire. */}
-            <div className={smallText}>
-              Objectif : <Num>{toReserve}</Num> réservés + <Num>{state.min}</Num> libres = <Num>{total.need}</Num>
+            <div className={`${smallText} text-[10px]! tracking-[.05em]! whitespace-nowrap`}>
+              Objectif : <Num>{toReserve}</Num> pour les kits + <Num>{state.min}</Num> pour la vente = <Num>{total.need}</Num>
             </div>
           </div>
 
@@ -221,10 +221,10 @@ function PackDetail({ product, collectionName }) {
         }
       >
       <section className="flex flex-col gap-2 border border-line/50 bg-panel/60 px-6 py-5">
-        <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <div className="sc text-[16px] tracking-[.16em] text-gold">Pièces en stock</div>
-          <div className="sub">
-            Objectif par type : <Num>{toReserve}</Num> réservés + <Num>{state.min}</Num> libres = <Num>{total.need}</Num>
+        <div className="flex items-baseline justify-between gap-3">
+          <div className="sc text-[16px] tracking-[.16em] whitespace-nowrap text-gold">Pièces en stock</div>
+          <div className="sub text-[10px]! tracking-[.05em]! whitespace-nowrap">
+            Objectif : <Num>{toReserve}</Num> pour les kits + <Num>{state.min}</Num> pour la vente = <Num>{total.need}</Num>
           </div>
         </div>
 
