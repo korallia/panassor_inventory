@@ -3,6 +3,7 @@
 //   droite  : panneau Objectifs (kits prêts / étuis, kits prêts / minimum)
 // Kits visés = total des étuis (toutes couleurs). Chaque composant doit en
 // couvrir autant (l'outil par défaut pour les « au choix »).
+import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { useInventory } from "../store.jsx";
@@ -19,11 +20,13 @@ import {
   Stepper,
 } from "../components/ui.jsx";
 import { StockControl } from "../components/Ajuster.jsx";
+import { AjouterKits } from "../components/AjouterKits.jsx";
 
 export default function Kits() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { kits, collections, productsById, dispatch } = useInventory();
+  const { kits, collections, productsById, dispatch, source } = useInventory();
+  const [addingKits, setAddingKits] = useState(false);
   const kit = kits.find((k) => k.id === id) ?? kits[0];
   const collection = collections.find((c) => c.id === kit.collectionId);
 
@@ -60,6 +63,14 @@ export default function Kits() {
           })}
         </div>
       </PageHeader>
+      {source === "live" && (
+        <div className="-mt-6 flex justify-end">
+          <button type="button" className="btn-primary" onClick={() => setAddingKits(true)}>
+            + Ajouter des {kit.name.replace(/^Kit/, "kits")}
+          </button>
+        </div>
+      )}
+      {addingKits && <AjouterKits initialKitId={kit.id} onClose={() => setAddingKits(false)} />}
 
       <div className="grid w-full items-stretch justify-center gap-8 lg:grid-cols-[minmax(0,620px)_minmax(0,480px)] lg:gap-12 3xl:grid-cols-[minmax(230px,1fr)_minmax(0,620px)_minmax(0,480px)_minmax(0,1fr)]">
         <PageLegend />

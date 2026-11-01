@@ -6,9 +6,9 @@ import { useEffect, useState } from "react";
 import { useInventory } from "../store.jsx";
 import { Stepper } from "./ui.jsx";
 
-export function AjouterKits({ onClose }) {
+export function AjouterKits({ onClose, initialKitId }) {
   const { kits, productsById, addKits } = useInventory();
-  const [kitId, setKitId] = useState(kits[0]?.id || "");
+  const [kitId, setKitId] = useState(initialKitId || kits[0]?.id || "");
   const kit = kits.find((k) => k.id === kitId);
   const colors = (kit?.leather || []).filter((leather) => leather.variantId);
   const [variantId, setVariantId] = useState(colors[0]?.variantId || null);
