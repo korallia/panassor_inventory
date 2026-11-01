@@ -133,3 +133,98 @@ export async function listMovements(req, res) {
     })),
   });
 }
+
+/**
+ * Ajouter des kits complets d'un coup (fabrication) : l'étui de la couleur
+ * choisie + chaque pièce de la composition du kit (kit_components), comme une
+ * vente à l'envers. Les aiguilles suivent la recette de leur option par défaut.
+ * Corps : { kitId, variantId (couleur de l'étui), count, note }.
+ */
+export async function addKits(req, res) {
+  const kitId = Number(req.body?.kitId);
+  const variantId = req.body?.variantId == null ? null : Number(req.body.variantId);
+  const count = Number(req.body?.count);
+  const extra = typeof req.body?.note === "string" ? req.body.note.trim().slice(0, 300) : "";
+  if (!Number.isInteger(kitId)) return res.status(400).json({ error: "Kit inconnu." });
+  if (!Number.isInteger(count) || count < 1 || count > 200) return res.status(400).json({ error: "Nombre de kits invalide." });
+
+  const kit = (await pool.query(`SELECT id, name_fr FROM products WHERE id = $1 AND is_kit`, [kitId])).rows[0];
+  if (!kit) return res.status(404).json({ error: "Kit inconnu." });
+  const color = variantId
+    ? (await pool.query(
+        `SELECT c.name_fr FROM product_variants v JOIN colors c ON c.id = v.color_id WHERE v.id = $1 AND v.product_id = $2`,
+        [variantId, kitId]
+      )).rows[0]?.name_fr
+    : null;
+  if (variantId && !color) return res.status(400).json({ error: "Couleur d'étui inconnue pour ce kit." });
+
+  // Ce que le kit ajoute : { stockId: quantité }.
+  const adds = new Map();
+  const add = (stockId, n) => adds.set(stockId, (adds.get(stockId) || 0) + n);
+  const stockOf = async (productId, variant = null) =>
+    (await pool.query(
+      variant == null
+        ? `SELECT id FROM stock WHERE product_id = $1 AND variant_id IS NULL`
+        : `SELECT id FROM stock WHERE product_id = $1 AND variant_id = $2`,
+      variant == null ? [productId] : [productId, variant]
+    )).rows[0]?.id;
+
+  const leather = await stockOf(kitId, variantId);
+  if (!leather) return res.status(400).json({ error: "Pas de ligne de stock pour cet étui." });
+  add(leather, count);
+
+  const components = (await pool.query(
+    `SELECT included_product_id AS product_id, quantity FROM kit_components WHERE kit_product_id = $1`,
+    [kitId]
+  )).rows;
+  for (const component of components) {
+    const n = (component.quantity || 1) * count;
+    const option = (await pool.query(
+      `SELECT quantity, variant_ids FROM product_options WHERE product_id = $1 ORDER BY sort_order, id LIMIT 1`,
+      [component.product_id]
+    )).rows[0];
+    if (option?.variant_ids?.length) {
+      for (const sort of option.variant_ids) {
+        const row = await stockOf(component.product_id, sort);
+        if (row) add(row, n);
+      }
+      continue;
+    }
+    const own = await stockOf(component.product_id);
+    if (own) {
+      add(own, option ? (option.quantity || 1) * n : n);
+      continue;
+    }
+    // Pièce comptée par sortes sans option : un paquet = 1 de chaque sorte.
+    const sorts = (await pool.query(
+      `SELECT s.id FROM stock s JOIN product_variants v ON v.id = s.variant_id
+       WHERE s.product_id = $1 AND v.color_id IS NULL`,
+      [component.product_id]
+    )).rows;
+    for (const sort of sorts) add(sort.id, option ? (option.quantity || 1) * n : n);
+  }
+
+  const label = `Kit complet ×${count} · ${kit.name_fr}${color ? ` (${color})` : ""}${extra ? ` · ${extra}` : ""}`;
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    for (const [stockId, n] of adds) {
+      const after = (await client.query(
+        `UPDATE stock SET quantity = quantity + $2, updated_at = now() WHERE id = $1 RETURNING quantity`,
+        [stockId, n]
+      )).rows[0].quantity;
+      await client.query(
+        `INSERT INTO stock_movements (stock_id, change, quantity_after, reason, atelier_user_id, note)
+         VALUES ($1, $2, $3, 'fabrication', (SELECT id FROM atelier_users WHERE email = $4), $5)`,
+        [stockId, n, after, req.atelierUser, label]
+      );
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+  res.json({ ok: true, lines: adds.size });
+}

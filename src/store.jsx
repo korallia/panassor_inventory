@@ -291,6 +291,22 @@ export function InventoryProvider({ children }) {
     [reload]
   );
 
+  // Ajouter des kits complets d'un coup (étui + chaque pièce), puis recharger.
+  const addKits = useCallback(
+    async (payload) => {
+      const response = await fetch("/api/kits/ajouter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }).catch(() => null);
+      const body = await response?.json().catch(() => ({}));
+      if (!response?.ok) return { ok: false, error: body?.error || "Ajout impossible." };
+      await reload();
+      return { ok: true, ...body };
+    },
+    [reload]
+  );
+
   // Minimums (vraies données) : enregistrés en base, 400 ms après le dernier clic,
   // pour ne pas envoyer une requête à chaque − / +.
   const minimumTimers = useRef({});
@@ -334,9 +350,10 @@ export function InventoryProvider({ children }) {
       closeAdjust,
       findStockLine,
       adjustStock,
+      addKits,
       saveMinimum,
     }),
-    [state, computed, status, error, requestCode, verifyCode, logout, reload, adjusting, openAdjust, closeAdjust, findStockLine, adjustStock, saveMinimum]
+    [state, computed, status, error, requestCode, verifyCode, logout, reload, adjusting, openAdjust, closeAdjust, findStockLine, adjustStock, addKits, saveMinimum]
   );
   return <InventoryContext.Provider value={value}>{children}</InventoryContext.Provider>;
 }
