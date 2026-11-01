@@ -42,7 +42,7 @@ function readAtelierConfig() {
 
 export async function loadAtelierData() {
   const atelierConfig = readAtelierConfig();
-  const [collectionsRes, productsRes, imagesRes, variantsRes, componentsRes, stockRes, minimumsRes] = await Promise.all([
+  const [collectionsRes, productsRes, imagesRes, variantsRes, componentsRes, stockRes, minimumsRes, owedRes] = await Promise.all([
     readOnly(`SELECT id, name_fr, status FROM collections ORDER BY name_fr`),
     readOnly(`
       SELECT id, collection_id, slug_fr, name_fr, name_en, title_fr, title_en,
@@ -64,6 +64,13 @@ export async function loadAtelierData() {
     readOnly(`SELECT id, product_id, variant_id, quantity FROM stock`),
     // Minimums (migration 017) : par produit, ou par variante (étui d'une couleur).
     readOnly(`SELECT product_id, variant_id, minimum FROM minimums`),
+    // Ventes non comblées : ventes qui ont rendu une ligne de stock négative
+    // (migration 018 du site). Les plus récentes d'abord.
+    readOnly(`
+      SELECT m.stock_id, m.note
+      FROM stock_movements m JOIN stock s ON s.id = m.stock_id
+      WHERE s.quantity < 0 AND m.reason = 'vente' AND m.note LIKE '%manquait%'
+      ORDER BY m.created_at DESC, m.id DESC`),
   ]);
 
   const variantsByProduct = {};
@@ -84,8 +91,32 @@ export async function loadAtelierData() {
     else minByVariant[row.variant_id] = row.minimum;
   }
 
+  // Pièces manquantes par ligne de stock : un stock à −3 = 3 pièces dues. On les
+  // attribue aux ventes « manquait N », des plus récentes aux plus anciennes
+  // (une fabrication comble d'abord les plus anciennes).
+  const quantityByStock = Object.fromEntries(stockRes.rows.map((row) => [row.id, row.quantity]));
+  const owedByStock = {};
+  for (const m of owedRes.rows) {
+    const left = -(quantityByStock[m.stock_id] ?? 0) - (owedByStock[m.stock_id] || []).reduce((n, o) => n + o.qty, 0);
+    const missing = Number(m.note.match(/manquait (\d+)/)?.[1] || 0);
+    const ref = m.note.match(/\(Square ([^)]+)\)/)?.[1];
+    if (left <= 0 || !missing || !ref) continue;
+    (owedByStock[m.stock_id] ||= []).push({
+      ref,
+      orderNumber: m.note.match(/Commande #(\d+)/)?.[1] || null,
+      qty: Math.min(missing, left),
+      // Ce qui a été vendu (« Kit du chirurgien (Noir) ») ; vide si la pièce a été vendue seule.
+      source: (m.note.split(" · ")[1] || "").split(", ").filter((x) => x && x !== "vendu seul").join(", "),
+    });
+  }
+
   // Une ligne de stock vue par l'atelier : son id sert aux boutons « Ajuster ».
-  const line = (row) => ({ stockId: row ? String(row.id) : null, stock: row?.quantity ?? 0 });
+  // stock peut être négatif (ventes non comblées) ; owed = les commandes à combler.
+  const line = (row) => ({
+    stockId: row ? String(row.id) : null,
+    stock: row?.quantity ?? 0,
+    owed: row ? owedByStock[row.id] || [] : [],
+  });
 
   const id = (value) => String(value);
   const kitsRows = productsRes.rows.filter((p) => p.is_kit);
@@ -222,9 +253,60 @@ export async function loadAtelierData() {
     })),
   }));
 
+  // Commandes à combler : chaque commande qui doit encore des pièces, avec TOUT
+  // ce qu'elle a fait sortir (pour un kit : chaque pièce, comblée ou non).
+  const owedFor = (stockId, ref) => (owedByStock[stockId] || []).find((o) => o.ref === ref)?.qty || 0;
+  const pendingRefs = [...new Set(Object.values(owedByStock).flat().map((o) => o.ref))];
+  const pendingOrders = [];
+  if (pendingRefs.length) {
+    const salesRes = await readOnly(
+      `SELECT m.stock_id, m.change, m.note, m.created_at, p.id AS product_id, p.name_fr, p.is_kit,
+              c.name_fr AS collection, coalesce(v.label_fr, col.name_fr) AS variant
+       FROM stock_movements m
+       JOIN stock s ON s.id = m.stock_id
+       JOIN products p ON p.id = s.product_id
+       LEFT JOIN collections c ON c.id = p.collection_id
+       LEFT JOIN product_variants v ON v.id = s.variant_id
+       LEFT JOIN colors col ON col.id = v.color_id
+       WHERE m.reason = 'vente' AND m.note LIKE ANY($1)
+       ORDER BY m.id`,
+      [pendingRefs.map((ref) => `%(Square ${ref})%`)]
+    );
+    const byRef = new Map();
+    for (const m of salesRes.rows) {
+      const ref = m.note.match(/\(Square ([^)]+)\)/)?.[1];
+      if (!ref) continue;
+      let order = byRef.get(ref);
+      if (!order) {
+        order = { ref, orderNumber: m.note.match(/Commande #(\d+)/)?.[1] || null, at: m.created_at, collections: [], items: [] };
+        byRef.set(ref, order);
+      }
+      if (m.collection && !order.collections.includes(m.collection)) order.collections.push(m.collection);
+      const name = m.is_kit && m.variant
+        ? `Étui ${m.variant.toLowerCase()}`
+        : m.variant
+          ? `${m.name_fr} (${m.variant.toLowerCase()})`
+          : m.name_fr;
+      const sources = (m.note.split(" · ")[1] || "").split(", ").filter((x) => x && x !== "vendu seul");
+      const qty = -m.change;
+      const missing = Math.min(qty, owedFor(m.stock_id, ref));
+      // Ce qui a été vendu (kit, ensemble, option d'aiguilles) sert de titre au groupe ;
+      // une pièce vendue seule (« vendu seul ») n'a pas de titre.
+      const source = sources[0] || "";
+      order.items.push({ name, productId: id(m.product_id), qty, missing, source });
+    }
+    for (const order of byRef.values()) {
+      order.qty = order.items.reduce((n, item) => n + item.qty, 0);
+      order.missing = order.items.reduce((n, item) => n + item.missing, 0);
+      if (order.missing > 0) pendingOrders.push(order);
+    }
+    pendingOrders.sort((a, b) => Number(a.orderNumber || 0) - Number(b.orderNumber || 0));
+  }
+
   return {
     source: "live",
     loadedAt: new Date().toISOString(),
+    pendingOrders,
     collections,
     products,
     kits,

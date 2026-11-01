@@ -2,7 +2,7 @@
 // Filtres : raison, personne, période, et recherche par pièce.
 // Les mouvements viennent de la table stock_movements (migration 017).
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { useInventory } from "../store.jsx";
 import { PageHeader } from "../components/ui.jsx";
@@ -71,6 +71,9 @@ const signed = (n) => `${n > 0 ? "+" : "−"}${Math.abs(n)}`;
 export default function Historique() {
   const { source, loadedAt, error } = useInventory();
   const [filters, setFilters] = useState({ raison: "", personne: "", du: "", au: "" });
+  // ?vente=<id Square> : arrivée depuis « Pièces manquantes » d'une fiche.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const sale = searchParams.get("vente") || "";
   const [query, setQuery] = useState("");
   const [data, setData] = useState({ movements: [], people: [] });
   const personName = useMemo(
@@ -113,6 +116,26 @@ export default function Historique() {
     (m) => !needle || `${m.product} ${m.variant || ""} ${m.collection || ""}`.toLowerCase().includes(needle)
   );
   const lines = groupSales(rows);
+
+  // Arrivée par un lien de vente (« Pièces manquantes » d'une fiche) : on
+  // garde tout l'historique, on ouvre seulement la fenêtre de cette vente,
+  // puis on retire ?vente= de l'adresse (un rafraîchissement montre tout).
+  useEffect(() => {
+    if (!sale || status !== "pret") return;
+    const openFound = (list) => {
+      const found = groupSales(list).find((line) => line.kind === "sale" && line.ref === sale);
+      if (found) setOpenSale(found);
+      setSearchParams({}, { replace: true });
+    };
+    const inPage = data.movements.some((m) => m.note?.includes(`(Square ${sale})`));
+    if (inPage) return openFound(data.movements);
+    // Vente plus ancienne que les 300 derniers mouvements : on va la chercher seule.
+    fetch(`/api/mouvements?vente=${encodeURIComponent(sale)}&limite=100`)
+      .then((response) => (response.ok ? response.json() : { movements: [] }))
+      .then((result) => openFound(result.movements))
+      .catch(() => setSearchParams({}, { replace: true }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sale, status, data]);
 
   return (
     <div className="flex flex-col gap-6">

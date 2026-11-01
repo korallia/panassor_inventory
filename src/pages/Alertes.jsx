@@ -64,6 +64,10 @@ function useAlerts() {
         continue;
       }
       const state = productState(product, reserved);
+      // Le vrai stock, même négatif (ventes non comblées) : −3 s'affiche −3, et
+      // le manque compte ces 3 pièces déjà vendues par-dessus l'objectif.
+      const rawStock =
+        product.type === "paquet" ? Math.min(...product.packTypes.map((type) => type.stock)) : product.stock ?? 0;
       const target = kits.reduce(
         (sum, kit) => sum + leatherTotal(kit) * kit.components.filter((c) => c.productId === product.id).reduce((q, c) => q + c.qty, 0),
         0
@@ -73,10 +77,10 @@ function useAlerts() {
         status: state.status,
         name: product.name,
         units: product.type === "paquet" ? ["paquet", "paquets"] : null,
-        have: state.stock,
+        have: rawStock,
         need: target + state.min,
         missing: {
-          total: Math.max(0, target + state.min - state.stock),
+          total: Math.max(0, target + state.min - rawStock),
           libre: state.missingForMin,
           reserve: Math.max(0, target - state.reserved),
         },
@@ -86,6 +90,133 @@ function useAlerts() {
     }
     return list;
   }, [kits, products, collections, productsById, reserved]);
+}
+
+/** Commandes à combler (calculées par le serveur : pendingOrders). */
+function useUrgentOrders() {
+  const { pendingOrders } = useInventory();
+  return pendingOrders || [];
+}
+
+const URGENT = "#ff5f4a";
+
+// Ce qui a été commandé : les kits par leur nom, les pièces vendues seules par leur nom (×n).
+function orderTitle(order) {
+  const parts = [];
+  for (const item of order.items) {
+    const label = item.source || (item.qty > 1 ? `${item.name} ×${item.qty}` : item.name);
+    if (!parts.includes(label)) parts.push(label);
+  }
+  return parts.join(", ");
+}
+
+function UrgentOrders({ rows }) {
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(() => new Set());
+  if (rows.length === 0) return null;
+  const toggle = (ref) =>
+    setOpen((current) => {
+      const next = new Set(current);
+      next.has(ref) ? next.delete(ref) : next.add(ref);
+      return next;
+    });
+  const pink = { color: "#ffb3a6" };
+  return (
+    <div className="mt-6">
+      <div
+        className="flex items-center justify-between gap-4 border px-4 py-2.5"
+        style={{ borderColor: "rgba(255,95,74,.6)", background: "linear-gradient(90deg,rgba(255,95,74,.22),rgba(255,95,74,.04))" }}
+      >
+        <span className="sc text-[17px] tracking-[.16em]" style={pink}>
+          ⚠ Commandes à combler
+        </span>
+        <span className="text-[26px] leading-none font-semibold" style={pink}>
+          {rows.length}
+        </span>
+      </div>
+      <div className="border border-t-0" style={{ borderColor: "rgba(255,95,74,.4)" }}>
+        {rows.map((order) => {
+          const expanded = open.has(order.ref);
+          // Pièces regroupées par ce qui a été vendu (un kit, ou « vendu seul »).
+          const groups = [];
+          for (const item of order.items) {
+            const key = item.source || "";
+            let group = groups.find((g) => g.key === key);
+            if (!group) groups.push((group = { key, items: [] }));
+            group.items.push(item);
+          }
+          return (
+            <div key={order.ref} className="border-b last:border-b-0" style={{ borderBottomColor: "rgba(255,95,74,.3)" }}>
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => toggle(order.ref)}
+                onKeyDown={(event) => (event.key === "Enter" || event.key === " ") && (event.preventDefault(), toggle(order.ref))}
+                aria-expanded={expanded}
+                className="relative flex cursor-pointer items-center gap-4 py-4 pr-4 pl-5 hover:brightness-125"
+                style={{ background: expanded ? "rgba(255,95,74,.16)" : "rgba(255,95,74,.08)" }}
+              >
+                <span className="absolute top-0 bottom-0 left-0 w-[5px]" style={{ background: URGENT }} />
+                <span className="w-3 shrink-0 text-[13px] text-gold">{expanded ? "▾" : "▸"}</span>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    navigate(`/historique?vente=${encodeURIComponent(order.ref)}`);
+                  }}
+                  title="Voir la vente dans l'historique"
+                  className="sc shrink-0 cursor-pointer border border-gold/55 bg-transparent px-2 py-0.5 text-[13px] tracking-[.1em] text-gold-light hover:border-gold hover:text-cream"
+                >
+                  {order.orderNumber ? `#${order.orderNumber}` : "Square"}
+                </button>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[18px] text-cream">{orderTitle(order)}</span>
+                  <span className="sub mt-0.5 block">{order.collections.join(" · ")}</span>
+                </span>
+                <span className="w-[90px] shrink-0 text-right text-[19px] text-muted2 tabular-nums">
+                  <span className="font-semibold" style={pink}>{order.qty - order.missing}</span>
+                  <span className="text-[15px]"> / {order.qty}</span>
+                </span>
+              </div>
+              {expanded &&
+                groups.map((group) => (
+                  <div key={group.key} className="bg-ink">
+                    {group.key && (
+                      <div className="sc border-t border-line/30 py-2 pr-4 pl-14 text-[12px] tracking-[.14em] text-gold">{group.key}</div>
+                    )}
+                    {group.items.map((item) => (
+                      <button
+                        key={item.name}
+                        type="button"
+                        onClick={() => navigate(`/produits/${item.productId}`)}
+                        className="flex w-full cursor-pointer items-center gap-4 border-0 border-t border-line/25 bg-transparent py-2.5 pr-4 pl-14 text-left hover:bg-gold/8"
+                      >
+                        <span className="min-w-0 flex-1 text-[16px] text-muted">{item.name}</span>
+                        {item.missing > 0 ? (
+                          <>
+                            <span className="sc text-[12px] tracking-[.1em]" style={pink}>manquant</span>
+                            <span className="w-[70px] shrink-0 text-right text-[16px] text-muted2 tabular-nums">
+                              <span style={pink}>{item.qty - item.missing}</span> / {item.qty}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="sc text-[12px] tracking-[.1em] text-ok">rempli</span>
+                            <span className="w-[70px] shrink-0 text-right text-[16px] text-ok tabular-nums">
+                              {item.qty} / {item.qty}
+                            </span>
+                          </>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                ))}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 // Une alerte = il en manque, ou il ne reste plus rien (même sans minimum fixé).
@@ -164,7 +295,7 @@ function AlertGroups({ groups, onOpen }) {
               <span className="absolute top-0 bottom-0 left-0 w-[5px]" style={{ background: u.color }} />
               <div className="min-w-0 flex-1 text-[19px] text-cream">{alert.name}</div>
               <div className="w-[90px] shrink-0 text-right text-[19px] text-muted2">
-                <span className="font-semibold" style={{ color: u.color }}>{alert.have}</span>
+                <span className="font-semibold" style={{ color: u.color }}>{alert.have < 0 ? `−${Math.abs(alert.have)}` : alert.have}</span>
                 <span className="text-[15px]"> / {alert.need}</span>
               </div>
               <div className="w-[190px] shrink-0 whitespace-nowrap text-right text-[17px] font-semibold" style={{ color: u.color }}>
@@ -189,6 +320,7 @@ export default function Alertes() {
     .sort((a, b) => gap(b) - gap(a) || b.missing.total - a.missing.total);
   // Groupées par collection (dans l'ordre des collections), les plus loin de la cible d'abord.
   const groups = groupByCollection(alerts, collections);
+  const urgent = useUrgentOrders();
 
   return (
     <div className="flex flex-col gap-8">
@@ -200,6 +332,7 @@ export default function Alertes() {
           <div className="border-b border-line/35 pb-8">
             {alerts.length > 0 && <AlertSummary alerts={alerts} groups={groups} />}
           </div>
+          <UrgentOrders rows={urgent} />
           {alerts.length === 0 && <div className="border-t border-line/35 py-6 text-center text-[18px] text-ok">Aucune alerte, tout est au-dessus du minimum.</div>}
           <AlertGroups groups={groups} onOpen={(alert) => navigate(alert.to)} />
         </section>

@@ -169,6 +169,8 @@ function reducer(state, action) {
         products: action.data.products,
         kits: action.data.kits,
         catalog: action.data.catalog,
+        // Commandes payées sans stock (ventes non comblées), avec tout leur contenu.
+        pendingOrders: action.data.pendingOrders || [],
         objectives: [],
         source: "live",
         loadedAt: action.data.loadedAt,

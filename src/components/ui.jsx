@@ -1,5 +1,5 @@
 // Petites briques visuelles partagées par toutes les pages.
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { useInventory } from "../store.jsx";
 
@@ -216,12 +216,15 @@ export function RowGauge({ have, need, height = 30 }) {
 }
 
 /** Chiffre « a / b » coloré selon l'état, avec une petite note dessous. */
+// Un stock négatif s'écrit avec le vrai signe moins (−3).
+const signedValue = (value) => (value < 0 ? `−${Math.abs(value)}` : value);
+
 export function RatioValue({ have, need, note }) {
   const reached = have >= need;
   return (
     <div className="text-right tabular-nums">
       <div className="leading-none">
-        <span className={`text-[26px] ${reached ? "text-[#cfe5d2]" : "text-alert-soft"}`}>{have}</span>
+        <span className={`text-[26px] ${reached ? "text-[#cfe5d2]" : "text-alert-soft"}`}>{signedValue(have)}</span>
         <span className="text-[17px] text-muted2"> / {need}</span>
       </div>
       {note && <div className="sub mt-1.5">{note}</div>}
@@ -230,14 +233,15 @@ export function RatioValue({ have, need, note }) {
 }
 
 /** Une colonne : titre, chiffre, barre verticale, note. */
-export function GaugeColumn({ label, note, have, need, unit, height = 300 }) {
+export function GaugeColumn({ label, note, have, need, unit, height = 300, shown }) {
+  // shown : le chiffre à afficher s'il diffère du calcul (stock négatif : −3, barre à 0).
   const reached = have >= need;
   const extra = Math.max(0, have - need);
   return (
     <div className="flex h-full min-w-0 flex-col items-center gap-3 text-center">
       <div className="sc text-[19px] tracking-[.14em] text-cream">{label}</div>
       <div className="tabular-nums leading-none">
-        <span className={`text-[36px] ${reached ? "text-[#cfe5d2]" : "text-alert-soft"}`}>{have}</span>
+        <span className={`text-[36px] ${reached ? "text-[#cfe5d2]" : "text-alert-soft"}`}>{signedValue(shown ?? have)}</span>
         <span className="text-[19px] text-muted2"> / {need}</span>
         {unit && <div className="sub mt-1.5">{unit}</div>}
       </div>
@@ -545,5 +549,61 @@ export function TotalBand({ label, value }) {
       <span className="sc text-[14px] tracking-[.16em] text-gold-light">{label}</span>
       <span className="text-[32px] leading-none font-semibold text-cream">{value}</span>
     </div>
+  );
+}
+
+/**
+ * Pièces manquantes : ventes payées sans stock (stock négatif). Même panneau
+ * que « Pièces en stock » : une ligne avec la barre découpée par commande
+ * (nombre dans la barre, numéro de commande dessous). Un clic sur une commande
+ * ouvre la vente dans l'Historique. owed = [{ ref, orderNumber, qty, label? }].
+ */
+export function MissingPieces({ name, owed }) {
+  const navigate = useNavigate();
+  const total = owed.reduce((n, o) => n + o.qty, 0);
+  if (!total) return null;
+  const open = (order) => navigate(`/historique?vente=${encodeURIComponent(order.ref)}`);
+  const key = (order) => `${order.ref}-${order.label || ""}`;
+  return (
+    <section className="flex flex-col gap-2 border border-line/50 bg-panel/60 px-6 py-5">
+      <div className="flex items-baseline justify-between gap-3">
+        <div className="sc text-[16px] tracking-[.16em] whitespace-nowrap text-gold">Pièces manquantes</div>
+        <div className="sub text-[10px]! tracking-[.05em]! whitespace-nowrap">à fabriquer en priorité</div>
+      </div>
+      <div className="flex flex-wrap items-center justify-center gap-x-11 gap-y-4 border-t border-line/35 pt-7 pb-3 sm:flex-nowrap">
+        <div className="text-[25px] leading-tight text-cream">{name}</div>
+        <div className="order-last w-full min-w-0 sm:order-none sm:w-[300px] sm:shrink">
+          <div className="flex h-[30px] gap-[3px]">
+            {owed.map((order) => (
+              <button
+                key={key(order)}
+                type="button"
+                onClick={() => open(order)}
+                title="Voir la vente dans l'historique"
+                className="box-border flex min-w-0 cursor-pointer items-center justify-center overflow-hidden p-0 text-[15px] tabular-nums hover:brightness-150"
+                style={{ flex: order.qty, ...GAUGE_STYLES.missing }}
+              >
+                {order.qty}
+              </button>
+            ))}
+          </div>
+          <div className="mt-1.5 flex gap-[3px]">
+            {owed.map((order) => (
+              <button
+                key={key(order)}
+                type="button"
+                onClick={() => open(order)}
+                className="sc min-w-0 cursor-pointer truncate border-0 bg-transparent p-0 text-center text-[12px] tracking-[.1em] text-gold-light hover:text-cream"
+                style={{ flex: order.qty }}
+              >
+                {order.orderNumber ? `#${order.orderNumber}` : "Square"}
+                {order.label ? ` · ${order.label}` : ""}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="text-[26px] leading-none text-alert-soft tabular-nums">{total}</div>
+      </div>
+    </section>
   );
 }
