@@ -42,7 +42,7 @@ function readAtelierConfig() {
 
 export async function loadAtelierData() {
   const atelierConfig = readAtelierConfig();
-  const [collectionsRes, productsRes, imagesRes, variantsRes, componentsRes, stockRes, minimumsRes, owedRes] = await Promise.all([
+  const [collectionsRes, productsRes, imagesRes, variantsRes, componentsRes, stockRes, minimumsRes, owedRes, optionsRes] = await Promise.all([
     readOnly(`SELECT id, name_fr, status FROM collections ORDER BY name_fr`),
     readOnly(`
       SELECT id, collection_id, slug_fr, name_fr, name_en, title_fr, title_en,
@@ -71,12 +71,37 @@ export async function loadAtelierData() {
       FROM stock_movements m JOIN stock s ON s.id = m.stock_id
       WHERE s.quantity < 0 AND m.reason = 'vente' AND m.note LIKE '%manquait%'
       ORDER BY m.created_at DESC, m.id DESC`),
+    // Option par défaut de chaque produit (la première, migration 007) : elle dit
+    // ce qu'est un paquet (suture : 1 droite + 1 courbe ; douleur : 2 aiguilles).
+    readOnly(`
+      SELECT DISTINCT ON (product_id) product_id, quantity, variant_ids
+      FROM product_options ORDER BY product_id, sort_order, id`),
   ]);
 
   const variantsByProduct = {};
   for (const v of variantsRes.rows) (variantsByProduct[v.product_id] ||= []).push(v);
   const colorVariantsOf = (productId) => (variantsByProduct[productId] || []).filter((v) => v.color);
   const sortsOf = (productId) => (variantsByProduct[productId] || []).filter((v) => !v.color && v.label_fr);
+  const defaultOption = Object.fromEntries(optionsRes.rows.map((o) => [o.product_id, o]));
+  // Un paquet, d'après l'option par défaut : [{ id, name, perPack, row }] par sorte.
+  //   suture  : 1 droite + 1 courbe (variant_ids)
+  //   douleur : 2 aiguilles (quantity), sur sa sorte unique ou sur le produit lui-même
+  // Sans option : 1 de chaque sorte s'il y en a plusieurs. Sinon, pas un paquet.
+  const packOf = (productId) => {
+    const sorts = sortsOf(productId);
+    const option = defaultOption[productId];
+    const fromSort = (v, perPack) => ({ id: id(v.id), name: `${v.label_fr}s`, perPack, row: stockByVariant[v.id] });
+    if (option?.variant_ids?.length && sorts.length) {
+      return sorts.map((v) => fromSort(v, option.variant_ids.filter((x) => x === v.id).length));
+    }
+    if (option && (option.quantity || 1) > 1 && sorts.length <= 1) {
+      if (sorts.length === 1) return [fromSort(sorts[0], option.quantity)];
+      return [{ id: `p${productId}`, name: "Aiguilles", perPack: option.quantity, row: stockByProduct[productId] }];
+    }
+    if (sorts.length > 1) return sorts.map((v) => fromSort(v, 1));
+    return null;
+  };
+
 
   const stockByProduct = {};
   const stockByVariant = {};
@@ -163,9 +188,10 @@ export async function loadAtelierData() {
       };
     }
     const sorts = sortsOf(p.id);
-    if (sorts.length > 1) {
-      // Paquet (aiguilles de suture) : chaque sorte (Droite, Courbe) a son stock.
-      // Un paquet = 1 de chaque ; le surplus d'une sorte = orphelines.
+    const pack = packOf(p.id);
+    if (pack) {
+      // Paquet (aiguilles) : chaque sorte a son stock ; un paquet = l'option par
+      // défaut (suture : 1 droite + 1 courbe ; douleur : 2 aiguilles). Le surplus = orphelines.
       return {
         id: id(p.id),
         collectionId: id(p.collection_id),
@@ -173,7 +199,7 @@ export async function loadAtelierData() {
         type: "paquet",
         min: minByProduct[p.id] ?? 0,
         inKit: inAKit.has(id(p.id)),
-        packTypes: sorts.map((v) => ({ id: id(v.id), name: `${v.label_fr}s`, ...line(stockByVariant[v.id]) })),
+        packTypes: pack.map(({ id: typeId, name, perPack, row }) => ({ id: typeId, name, perPack, ...line(row) })),
       };
     }
     // Une seule sorte (aiguilles de douleur) : se compte comme une pièce, sur sa variante.
@@ -227,7 +253,7 @@ export async function loadAtelierData() {
     id: id(p.id),
     collectionId: id(p.collection_id),
     isKit: p.is_kit,
-    type: p.is_kit ? undefined : ensembles[p.slug_fr] ? "ensemble" : sortsOf(p.id).length > 1 ? "paquet" : p.customizable ? "outil" : "piece",
+    type: p.is_kit ? undefined : ensembles[p.slug_fr] ? "ensemble" : packOf(p.id) ? "paquet" : p.customizable ? "outil" : "piece",
     nameFr: p.name_fr || "",
     nameEn: p.name_en || "",
     titleFr: p.title_fr || "",

@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useInventory } from "../store.jsx";
-import { ensembleState, kitsReady, leatherTotal, productState, stockStatus } from "../lib/inventory.js";
+import { ensembleState, kitsReady, leatherTotal, productState, rawPacks, stockStatus } from "../lib/inventory.js";
 import { PageHeader, SampleNote, Stepper } from "../components/ui.jsx";
 
 const plural = (n, one, many) => (n === 1 ? one : many);
@@ -67,7 +67,7 @@ function useAlerts() {
       // Le vrai stock, même négatif (ventes non comblées) : −3 s'affiche −3, et
       // le manque compte ces 3 pièces déjà vendues par-dessus l'objectif.
       const rawStock =
-        product.type === "paquet" ? Math.min(...product.packTypes.map((type) => type.stock)) : product.stock ?? 0;
+        product.type === "paquet" ? rawPacks(product) : product.stock ?? 0;
       const target = kits.reduce(
         (sum, kit) => sum + leatherTotal(kit) * kit.components.filter((c) => c.productId === product.id).reduce((q, c) => q + c.qty, 0),
         0
