@@ -290,9 +290,9 @@ export async function loadAtelierData() {
       const sources = (m.note.split(" · ")[1] || "").split(", ").filter((x) => x && x !== "vendu seul");
       const qty = -m.change;
       const missing = Math.min(qty, owedFor(m.stock_id, ref));
-      // Une pièce vendue dans un kit est rangée sous ce kit ; vendue seule : sans titre.
-      // (l'étui d'un kit va sous son kit ; une option d'aiguilles vendue seule n'a pas de titre).
-      const source = m.is_kit ? sources[0] || "" : sources.find((x) => !x.startsWith(m.name_fr)) || "";
+      // Ce qui a été vendu (kit, ensemble, option d'aiguilles) sert de titre au groupe ;
+      // une pièce vendue seule (« vendu seul ») n'a pas de titre.
+      const source = sources[0] || "";
       order.items.push({ name, productId: id(m.product_id), qty, missing, source });
     }
     for (const order of byRef.values()) {
