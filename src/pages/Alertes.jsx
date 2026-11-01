@@ -574,6 +574,68 @@ function ReportPreview({ report }) {
   // Même couleur que les alertes : vert si atteint, sinon selon la distance au minimum.
   const tone = (have, need) =>
     have >= need ? "#9fc7a4" : urgency({ have, need, missing: { total: need - have } }).color;
+  const urgent = useUrgentOrders();
+  const { source } = useInventory();
+  const [sending, setSending] = useState("");
+
+  // Le même rapport, en texte pour Discord.
+  function discordText() {
+    const dot = (alert) => {
+      const g = gap(alert);
+      return g >= 0.99 ? "🔴" : g >= 0.5 ? "🟠" : "🟡";
+    };
+    const n = (value) => (value < 0 ? `−${Math.abs(value)}` : value);
+    const out = [`## ${report.name}`, `*${today}*`];
+    if (has("alertes")) {
+      if (urgent.length) {
+        out.push("", `### ⚠️ Commandes à combler · ${urgent.length}`);
+        for (const order of urgent) {
+          out.push(`**#${order.orderNumber || "?"}** ${orderTitle(order)} — ${order.qty - order.missing} / ${order.qty}`);
+          for (const item of order.items.filter((i) => i.missing > 0)) out.push(`> ${item.name} : manque ${item.missing}`);
+        }
+      }
+      out.push("", `### Alertes · ${alerts.length}`);
+      if (!alerts.length) out.push("Tout est au-dessus du minimum.");
+      for (const g of groups) {
+        out.push(`**${g.name}** · ${g.alerts.length}`);
+        for (const a of g.alerts) out.push(`${dot(a)} ${a.name} — ${n(a.have)} / ${a.need} · ${missingText(a)}`);
+      }
+    }
+    if (has("kits")) {
+      out.push("", "### Kits prêts");
+      for (const kit of kits) {
+        const ready = kitsReady(kit, productsById);
+        out.push(`${ready >= kit.min ? "🟢" : "🔴"} ${kit.name} — **${ready}** (minimum ${kit.min})`);
+      }
+    }
+    if (has("stock")) {
+      out.push("", "### Stock libre");
+      for (const c of collections) {
+        const lines = [
+          ...products
+            .filter((p) => p.collectionId === c.id && p.type !== "ensemble")
+            .map((p) => `${p.name} ${productState(p, reserved).free}${p.type === "paquet" ? " paq." : ""}`),
+          ...products
+            .filter((p) => p.collectionId === c.id && p.type === "ensemble")
+            .map((p) => `${p.name} ${ensembleState(p, productsById, reserved).possible} ens.`),
+        ];
+        if (lines.length) out.push(`**${c.name}**`, lines.join(" · "));
+      }
+    }
+    out.push("", `-# Envoyé par Panassor · Atelier`);
+    return out.join("\n");
+  }
+
+  async function sendDiscord() {
+    setSending("envoi");
+    const response = await fetch("/api/rapports/discord", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: discordText() }),
+    }).catch(() => null);
+    const body = await response?.json().catch(() => ({}));
+    setSending(response?.ok ? "ok" : body?.error || "Envoi impossible.");
+  }
 
   return (
     <section className="flex flex-col border border-gold/70 bg-ink">
@@ -584,10 +646,32 @@ function ReportPreview({ report }) {
           <div className="sc mt-1 text-[26px] text-cream">{report.name}</div>
           <div className="text-[15px] text-muted2">{today}</div>
         </div>
-        <div className="sc border border-line px-3 py-1 text-[13px] tracking-[.12em] text-gold-light">{report.channel}</div>
+        {source === "live" ? (
+          <div className="flex flex-col items-end gap-1.5">
+            <button type="button" className="btn-primary" disabled={sending === "envoi" || report.sections.length === 0} onClick={sendDiscord}>
+              {sending === "envoi" ? "Envoi…" : "Envoyer sur Discord"}
+            </button>
+            {sending === "ok" && <span className="text-[14px] text-ok">Envoyé sur Discord ✓</span>}
+            {sending && sending !== "ok" && sending !== "envoi" && <span className="max-w-[260px] text-right text-[14px] text-alert">{sending}</span>}
+          </div>
+        ) : (
+          <div className="sc border border-line px-3 py-1 text-[13px] tracking-[.12em] text-gold-light">{report.channel}</div>
+        )}
       </div>
 
       <div className="flex flex-col px-7 py-6 [&>*+*]:mt-10 [&>*+*]:pt-10 [&>*+*]:[background:linear-gradient(90deg,rgba(200,155,60,0),rgba(200,155,60,.8),rgba(200,155,60,0))_top/100%_1px_no-repeat]">
+        {has("alertes") && urgent.length > 0 && (
+          <MsgSection title="Commandes à combler" count={urgent.length}>
+            {urgent.map((order) => (
+              <MsgRow key={order.ref} color="#ff5f4a" name={`#${order.orderNumber || "?"} · ${orderTitle(order)}`}>
+                <span className="shrink-0 text-right text-[16px] text-muted2">
+                  <span className="font-semibold" style={{ color: "#ffb3a6" }}>{order.qty - order.missing}</span> / {order.qty}
+                </span>
+              </MsgRow>
+            ))}
+          </MsgSection>
+        )}
+
         {has("alertes") && (
           <MsgSection title="Alertes" count={alerts.length}>
             {alerts.length === 0 ? (
@@ -684,7 +768,7 @@ function ReportPreview({ report }) {
       </div>
 
       <div className="sub border-t border-line/40 px-7 py-4">
-        Envoyé automatiquement par Panassor · Atelier · {scheduleText(report).toLowerCase()}
+        Envoyé par Panassor · Atelier · {scheduleText(report).toLowerCase()}
       </div>
     </section>
   );
