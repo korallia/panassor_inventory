@@ -10,6 +10,7 @@ import {
   leatherTotal,
   packMissingByType,
   packOrphans,
+  packSize,
   productState,
 } from "../lib/inventory.js";
 import {
@@ -212,12 +213,12 @@ function PackDetail({ product, collectionName }) {
     <div className="flex flex-col gap-8">
       <PageHeader
         back={{ to: "/inventaire", label: "Inventaire" }}
-        eyebrow={`${collectionName} · paquet de ${product.packTypes.length}`}
+        eyebrow={`${collectionName} · paquet de ${packSize(product)}`}
         title={product.name} />
 
       <DetailLayout
         aside={
-          <GaugePanel legend={false} footer={<div className="sub text-center">En paquets de <Num>{product.packTypes.length}</Num></div>}>
+          <GaugePanel legend={false} footer={<div className="sub text-center">En paquets de <Num>{packSize(product)}</Num></div>}>
             {toReserve > 0 && (
               <GaugeColumn label="Réservés" note={kitsNote(kitsUsing)} have={state.reserved} need={toReserve} unit="paquets" />
             )}
@@ -235,7 +236,8 @@ function PackDetail({ product, collectionName }) {
         </div>
 
         {product.packTypes.map((type, index) => {
-          const need = total.need;
+          // En pièces de cette sorte : un paquet en contient « perPack ».
+          const need = total.need * (type.perPack ?? 1);
           return (
             <div key={type.id} className="flex flex-wrap items-center gap-4 border-t border-line/35 py-3">
               <div className="w-[130px]">

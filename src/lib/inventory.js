@@ -23,16 +23,28 @@ export function leatherTotal(kit) {
  */
 export function productStock(product) {
   // Un stock négatif (une vente sans stock, migration 018 du site) compte comme 0 dans les calculs.
-  if (product.type === "paquet") {
-    return Math.max(0, Math.min(...product.packTypes.map((type) => type.stock)));
-  }
+  if (product.type === "paquet") return Math.max(0, rawPacks(product));
   return Math.max(0, product.stock ?? 0);
+}
+
+/**
+ * Paquets complets, même négatif (ventes non comblées). Un paquet contient
+ * « perPack » de chaque sorte (suture : 1 droite + 1 courbe ; douleur : 2).
+ */
+export function rawPacks(product) {
+  const types = product.packTypes.filter((type) => (type.perPack ?? 1) > 0);
+  return Math.min(...types.map((type) => Math.floor(type.stock / (type.perPack ?? 1))));
+}
+
+/** Pièces dans un paquet (toutes sortes confondues). */
+export function packSize(product) {
+  return product.packTypes.reduce((n, type) => n + (type.perPack ?? 1), 0);
 }
 
 /** Aiguilles (ou pièces) en trop par type, qui ne forment pas de paquet. */
 export function packOrphans(product) {
   const packs = productStock(product);
-  return product.packTypes.map((type) => ({ ...type, orphans: type.stock - packs }));
+  return product.packTypes.map((type) => ({ ...type, orphans: type.stock - packs * (type.perPack ?? 1) }));
 }
 
 /**
@@ -138,7 +150,7 @@ export function packMissingByType(product, reserved) {
   const target = (reserved[product.id] || 0) + (product.min ?? 0);
   return product.packTypes.map((type) => ({
     ...type,
-    missing: Math.max(0, target - type.stock),
+    missing: Math.max(0, target * (type.perPack ?? 1) - type.stock),
   }));
 }
 

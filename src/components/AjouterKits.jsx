@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { useInventory } from "../store.jsx";
 import { Stepper } from "./ui.jsx";
+import { packSize } from "../lib/inventory.js";
 
 export function AjouterKits({ onClose, initialKitId }) {
   const { kits, productsById, addKits } = useInventory();
@@ -31,7 +32,7 @@ export function AjouterKits({ onClose, initialKitId }) {
   const color = colors.find((c) => c.variantId === variantId);
   const pieces = (kit?.components || []).map((c) => {
     const product = productsById[c.productId];
-    const name = product?.type === "paquet" ? `${product.name} (paquet)` : product?.name || "?";
+    const name = product?.type === "paquet" ? `${product.name} (paquets de ${packSize(product)})` : product?.name || "?";
     return { name, qty: (c.qty || 1) * count, choice: c.choice };
   });
 
