@@ -6,109 +6,27 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useInventory } from "../store.jsx";
-import { ensembleState, kitsReady, leatherTotal, productState, rawPacks, stockStatus } from "../lib/inventory.js";
+import { ensembleState, kitsReady, productState } from "../lib/inventory.js";
+import { buildAlerts, buildReportText, gap, groupByCollection, isAlert, missingText, orderTitle } from "../lib/rapport.js";
 import { PageHeader, SampleNote, Stepper } from "../components/ui.jsx";
 
 const plural = (n, one, many) => (n === 1 ? one : many);
 
-/** Toutes les alertes : kits, étuis (par couleur), outils, ensembles, avec leurs 3 manques. */
+/** Toutes les alertes (calcul commun avec le rapport Discord : lib/rapport.js). */
 function useAlerts() {
   const { kits, products, collections, productsById, reserved } = useInventory();
-  return useMemo(() => {
-    const collectionName = Object.fromEntries(collections.map((c) => [c.id, c.name]));
-    const list = [];
-    for (const kit of kits) {
-      const ready = kitsReady(kit, productsById);
-      const miss = Math.max(0, kit.min - ready);
-      list.push({
-        id: kit.id,
-        status: stockStatus(ready, kit.min),
-        name: kit.name,
-        units: ["kit", "kits"],
-        have: ready,
-        need: kit.min,
-        missing: { total: miss, libre: 0, reserve: miss },
-        to: `/kits/${kit.id}`,
-        collection: collectionName[kit.collectionId],
-      });
-      for (const leather of kit.leather) {
-        const m = Math.max(0, (leather.min ?? 0) - leather.stock);
-        list.push({
-          id: `${kit.id}-${leather.color}`,
-          status: stockStatus(leather.stock, leather.min ?? 0),
-          name: `Étuis ${leather.color.toLowerCase()}`,
-          units: ["étui", "étuis"],
-          have: leather.stock,
-          need: leather.min ?? 0,
-          missing: { total: m, libre: 0, reserve: m },
-          to: `/kits/${kit.id}`,
-          collection: collectionName[kit.collectionId],
-        });
-      }
-    }
-    for (const product of products) {
-      if (product.type === "ensemble") {
-        const state = ensembleState(product, productsById, reserved);
-        const m = Math.max(0, state.objective - state.possible);
-        list.push({
-          id: product.id,
-          status: stockStatus(state.possible, state.objective),
-          name: product.name,
-          units: ["ensemble", "ensembles"],
-          have: state.possible,
-          need: state.objective,
-          missing: { total: m, libre: m, reserve: 0 },
-          to: `/produits/${product.id}`,
-          collection: collectionName[product.collectionId],
-        });
-        continue;
-      }
-      const state = productState(product, reserved);
-      // Le vrai stock, même négatif (ventes non comblées) : −3 s'affiche −3, et
-      // le manque compte ces 3 pièces déjà vendues par-dessus l'objectif.
-      const rawStock =
-        product.type === "paquet" ? rawPacks(product) : product.stock ?? 0;
-      const target = kits.reduce(
-        (sum, kit) => sum + leatherTotal(kit) * kit.components.filter((c) => c.productId === product.id).reduce((q, c) => q + c.qty, 0),
-        0
-      );
-      list.push({
-        id: product.id,
-        status: state.status,
-        name: product.name,
-        units: product.type === "paquet" ? ["paquet", "paquets"] : null,
-        have: rawStock,
-        need: target + state.min,
-        missing: {
-          total: Math.max(0, target + state.min - rawStock),
-          libre: state.missingForMin,
-          reserve: Math.max(0, target - state.reserved),
-        },
-        to: `/produits/${product.id}`,
-        collection: collectionName[product.collectionId],
-      });
-    }
-    return list;
-  }, [kits, products, collections, productsById, reserved]);
+  return useMemo(
+    () => buildAlerts({ kits, products, collections, productsById, reserved }),
+    [kits, products, collections, productsById, reserved]
+  );
 }
 
-/** Commandes à combler (calculées par le serveur : pendingOrders). */
 function useUrgentOrders() {
   const { pendingOrders } = useInventory();
   return pendingOrders || [];
 }
 
 const URGENT = "#ff5f4a";
-
-// Ce qui a été commandé : les kits par leur nom, les pièces vendues seules par leur nom (×n).
-function orderTitle(order) {
-  const parts = [];
-  for (const item of order.items) {
-    const label = item.source || (item.qty > 1 ? `${item.name} ×${item.qty}` : item.name);
-    if (!parts.includes(label)) parts.push(label);
-  }
-  return parts.join(", ");
-}
 
 function UrgentOrders({ rows }) {
   const navigate = useNavigate();
@@ -219,11 +137,6 @@ function UrgentOrders({ rows }) {
   );
 }
 
-// Une alerte = il en manque, ou il ne reste plus rien (même sans minimum fixé).
-const isAlert = (alert) => alert.missing.total > 0 || alert.have <= 0;
-// Plus c'est loin de la cible (en proportion), plus c'est haut.
-const gap = (alert) => (alert.missing.total > 0 ? alert.missing.total / Math.max(alert.need, 1) : 1);
-
 // Urgence = distance à la cible : rouge (plus rien), orange (plus de la moitié manque), jaune (moins de la moitié).
 function worstUrgency(list) {
   return urgency(list.reduce((w, x) => (gap(x) > gap(w) ? x : w), list[0]));
@@ -236,19 +149,7 @@ function urgency(alert) {
   return { color: "#e2b04a", line: "rgba(143,107,31,.8)", tint: "rgba(226,176,74,.10)" };
 }
 
-function missingText(alert) {
-  const n = alert.missing.total;
-  if (n === 0) return "Aucun en stock";
-  return alert.units ? `Manque ${n} ${plural(n, ...alert.units)}` : `Manque ${n}`;
-}
-
 const BAND_BG = { background: "linear-gradient(90deg,rgba(200,155,60,.16),rgba(200,155,60,.03))" };
-
-function groupByCollection(alerts, collections) {
-  return collections
-    .map((collection) => ({ name: collection.name, alerts: alerts.filter((a) => a.collection === collection.name) }))
-    .filter((group) => group.alerts.length > 0);
-}
 
 function AlertSummary({ alerts, groups, title = "Alertes en cours" }) {
   return (
@@ -578,53 +479,9 @@ function ReportPreview({ report }) {
   const { source } = useInventory();
   const [sending, setSending] = useState("");
 
-  // Le même rapport, en texte pour Discord.
-  function discordText() {
-    const dot = (alert) => {
-      const g = gap(alert);
-      return g >= 0.99 ? "🔴" : g >= 0.5 ? "🟠" : "🟡";
-    };
-    const n = (value) => (value < 0 ? `−${Math.abs(value)}` : value);
-    const out = [`## ${report.name}`, `*${today}*`];
-    if (has("alertes")) {
-      if (urgent.length) {
-        out.push("", `### ⚠️ Commandes à combler · ${urgent.length}`);
-        for (const order of urgent) {
-          out.push(`**#${order.orderNumber || "?"}** ${orderTitle(order)} — ${order.qty - order.missing} / ${order.qty}`);
-          for (const item of order.items.filter((i) => i.missing > 0)) out.push(`> ${item.name} : manque ${item.missing}`);
-        }
-      }
-      out.push("", `### Alertes · ${alerts.length}`);
-      if (!alerts.length) out.push("Tout est au-dessus du minimum.");
-      for (const g of groups) {
-        out.push(`**${g.name}** · ${g.alerts.length}`);
-        for (const a of g.alerts) out.push(`${dot(a)} ${a.name} — ${n(a.have)} / ${a.need} · ${missingText(a)}`);
-      }
-    }
-    if (has("kits")) {
-      out.push("", "### Kits prêts");
-      for (const kit of kits) {
-        const ready = kitsReady(kit, productsById);
-        out.push(`${ready >= kit.min ? "🟢" : "🔴"} ${kit.name} — **${ready}** (minimum ${kit.min})`);
-      }
-    }
-    if (has("stock")) {
-      out.push("", "### Stock libre");
-      for (const c of collections) {
-        const lines = [
-          ...products
-            .filter((p) => p.collectionId === c.id && p.type !== "ensemble")
-            .map((p) => `${p.name} ${productState(p, reserved).free}${p.type === "paquet" ? " paq." : ""}`),
-          ...products
-            .filter((p) => p.collectionId === c.id && p.type === "ensemble")
-            .map((p) => `${p.name} ${ensembleState(p, productsById, reserved).possible} ens.`),
-        ];
-        if (lines.length) out.push(`**${c.name}**`, lines.join(" · "));
-      }
-    }
-    out.push("", `-# Envoyé par Panassor · Atelier`);
-    return out.join("\n");
-  }
+  // Le même rapport, en texte pour Discord (même texte que l'envoi automatique du lundi).
+  const discordText = () =>
+    buildReportText({ kits, products, collections, productsById, reserved, pendingOrders: urgent }, { title: report.name, sections: report.sections });
 
   async function sendDiscord() {
     setSending("envoi");
