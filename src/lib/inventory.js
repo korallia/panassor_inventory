@@ -13,7 +13,7 @@ const sum = (values) => values.reduce((total, value) => total + value, 0);
 
 /** Nombre de kits visés = total des étuis de cuir, toutes couleurs. */
 export function leatherTotal(kit) {
-  return sum(kit.leather.map((leather) => leather.stock));
+  return sum(kit.leather.map((leather) => Math.max(0, leather.stock)));
 }
 
 /**
@@ -22,10 +22,11 @@ export function leatherTotal(kit) {
  * surplus d'un type ne compte pas (aiguilles orphelines).
  */
 export function productStock(product) {
+  // Un stock négatif (une vente sans stock, migration 018 du site) compte comme 0 dans les calculs.
   if (product.type === "paquet") {
-    return Math.min(...product.packTypes.map((type) => type.stock));
+    return Math.max(0, Math.min(...product.packTypes.map((type) => type.stock)));
   }
-  return product.stock ?? 0;
+  return Math.max(0, product.stock ?? 0);
 }
 
 /** Aiguilles (ou pièces) en trop par type, qui ne forment pas de paquet. */
