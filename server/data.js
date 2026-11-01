@@ -105,6 +105,8 @@ export async function loadAtelierData() {
       ref,
       orderNumber: m.note.match(/Commande #(\d+)/)?.[1] || null,
       qty: Math.min(missing, left),
+      // Ce qui a été vendu (« Kit du chirurgien (Noir) ») ; vide si la pièce a été vendue seule.
+      source: (m.note.split(" · ")[1] || "").split(", ").filter((x) => x && x !== "vendu seul").join(", "),
     });
   }
 
@@ -251,9 +253,60 @@ export async function loadAtelierData() {
     })),
   }));
 
+  // Commandes à combler : chaque commande qui doit encore des pièces, avec TOUT
+  // ce qu'elle a fait sortir (pour un kit : chaque pièce, comblée ou non).
+  const owedFor = (stockId, ref) => (owedByStock[stockId] || []).find((o) => o.ref === ref)?.qty || 0;
+  const pendingRefs = [...new Set(Object.values(owedByStock).flat().map((o) => o.ref))];
+  const pendingOrders = [];
+  if (pendingRefs.length) {
+    const salesRes = await readOnly(
+      `SELECT m.stock_id, m.change, m.note, m.created_at, p.id AS product_id, p.name_fr, p.is_kit,
+              c.name_fr AS collection, coalesce(v.label_fr, col.name_fr) AS variant
+       FROM stock_movements m
+       JOIN stock s ON s.id = m.stock_id
+       JOIN products p ON p.id = s.product_id
+       LEFT JOIN collections c ON c.id = p.collection_id
+       LEFT JOIN product_variants v ON v.id = s.variant_id
+       LEFT JOIN colors col ON col.id = v.color_id
+       WHERE m.reason = 'vente' AND m.note LIKE ANY($1)
+       ORDER BY m.id`,
+      [pendingRefs.map((ref) => `%(Square ${ref})%`)]
+    );
+    const byRef = new Map();
+    for (const m of salesRes.rows) {
+      const ref = m.note.match(/\(Square ([^)]+)\)/)?.[1];
+      if (!ref) continue;
+      let order = byRef.get(ref);
+      if (!order) {
+        order = { ref, orderNumber: m.note.match(/Commande #(\d+)/)?.[1] || null, at: m.created_at, collections: [], items: [] };
+        byRef.set(ref, order);
+      }
+      if (m.collection && !order.collections.includes(m.collection)) order.collections.push(m.collection);
+      const name = m.is_kit && m.variant
+        ? `Étui ${m.variant.toLowerCase()}`
+        : m.variant
+          ? `${m.name_fr} (${m.variant.toLowerCase()})`
+          : m.name_fr;
+      const sources = (m.note.split(" · ")[1] || "").split(", ").filter((x) => x && x !== "vendu seul");
+      const qty = -m.change;
+      const missing = Math.min(qty, owedFor(m.stock_id, ref));
+      // Une pièce vendue dans un kit est rangée sous ce kit ; vendue seule : sans titre.
+      // (l'étui d'un kit va sous son kit ; une option d'aiguilles vendue seule n'a pas de titre).
+      const source = m.is_kit ? sources[0] || "" : sources.find((x) => !x.startsWith(m.name_fr)) || "";
+      order.items.push({ name, productId: id(m.product_id), qty, missing, source });
+    }
+    for (const order of byRef.values()) {
+      order.qty = order.items.reduce((n, item) => n + item.qty, 0);
+      order.missing = order.items.reduce((n, item) => n + item.missing, 0);
+      if (order.missing > 0) pendingOrders.push(order);
+    }
+    pendingOrders.sort((a, b) => Number(a.orderNumber || 0) - Number(b.orderNumber || 0));
+  }
+
   return {
     source: "live",
     loadedAt: new Date().toISOString(),
+    pendingOrders,
     collections,
     products,
     kits,
