@@ -522,7 +522,8 @@ export function SampleNote() {
 export function typeLabel(product, inKit) {
   switch (product.type) {
     case "paquet":
-      return "Paquet de 2";
+      // Un paquet = l'option par défaut (suture : 1 droite + 1 courbe ; douleur : 2).
+      return `Paquet de ${(product.packTypes || []).reduce((n, type) => n + (type.perPack ?? 1), 0) || 2}`;
     case "ensemble":
       return "Ensemble";
     case "outil":

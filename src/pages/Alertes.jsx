@@ -7,7 +7,7 @@ import { useNavigate } from "react-router-dom";
 
 import { useInventory } from "../store.jsx";
 import { ensembleState, kitsReady, productState } from "../lib/inventory.js";
-import { buildAlerts, buildReportText, gap, groupByCollection, isAlert, missingText, orderTitle } from "../lib/rapport.js";
+import { buildAlerts, buildReportText, buildStockCsv, gap, groupByCollection, isAlert, missingText, orderTitle, reportDate } from "../lib/rapport.js";
 import { PageHeader, SampleNote, Stepper } from "../components/ui.jsx";
 
 const plural = (n, one, many) => (n === 1 ? one : many);
@@ -488,7 +488,12 @@ function ReportPreview({ report }) {
     const response = await fetch("/api/rapports/discord", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: discordText() }),
+      body: JSON.stringify({
+        content: discordText(),
+        // Le tableau du stock en pièce jointe, nommé avec la date du jour.
+        csv: buildStockCsv({ kits, products, collections, productsById, reserved }),
+        filename: `rapport-stock-${reportDate()}.csv`,
+      }),
     }).catch(() => null);
     const body = await response?.json().catch(() => ({}));
     setSending(response?.ok ? "ok" : body?.error || "Envoi impossible.");
