@@ -7,7 +7,7 @@ import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { useInventory } from "../store.jsx";
-import { kitsReady, leatherTotal, productStock } from "../lib/inventory.js";
+import { kitsReady, leatherTotal, packSize, productStock } from "../lib/inventory.js";
 import {
   GaugeColumn,
   PageLegend,
@@ -93,12 +93,14 @@ export default function Kits() {
                   <Link to={`/produits/${product.id}`} className="text-[21px] text-cream!">
                     {product.name}
                   </Link>
+                  {/* Un paquet (aiguilles) se compte en paquets, comme partout. */}
+                  {product.type === "paquet" && <div className="sub mt-1">en paquets de {packSize(product)}</div>}
                 </div>
                 <div className="order-last w-full min-w-0 sm:order-none sm:w-auto sm:flex-1">
                   <RowGauge have={stock} need={need} />
                 </div>
                 <div className="ml-auto w-[110px]">
-                  <RatioValue have={stock} need={need} />
+                  <RatioValue have={stock} need={need} note={product.type === "paquet" ? "paquets" : undefined} />
                 </div>
               </div>
             );
