@@ -295,7 +295,27 @@ export async function confirmEmailChange(req, res) {
   res.json({ ok: true, email: challenge.email });
 }
 
+// En local seulement : ATELIER_SANS_CONNEXION=true dans .env.atelier saute la
+// connexion. On agit au nom de ATELIER_COURRIEL_LOCAL (ou du premier compte
+// actif), pour que l'historique sache qui a fait quoi. Jamais sur Vercel.
+const skipLogin = !process.env.VERCEL && process.env.ATELIER_SANS_CONNEXION === "true";
+if (skipLogin) console.warn("[atelier] Connexion désactivée (ATELIER_SANS_CONNEXION=true) : local seulement.");
+
+async function localUser() {
+  const users = await loadUsers();
+  const wanted = normalizeEmail(process.env.ATELIER_COURRIEL_LOCAL);
+  if (wanted && users.has(wanted)) return wanted;
+  return users.keys().next().value || null;
+}
+
 export async function requireAuth(req, res, next) {
+  if (skipLogin) {
+    const email = await localUser().catch(() => null);
+    if (email) {
+      req.atelierUser = email;
+      return next();
+    }
+  }
   const value = readCookie(req, SESSION_COOKIE);
   if (value) {
     const [issued, email64, signature] = value.split(".");
