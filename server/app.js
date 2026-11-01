@@ -18,6 +18,7 @@ import {
 import { loadAtelierData } from "./data.js";
 import { imageRoute } from "./images.js";
 import { adjustStock, addKits, listMovements } from "./stock.js";
+import { sendReportToDiscord } from "./discord.js";
 import { setMinimum } from "./minimums.js";
 
 const app = express();
@@ -63,6 +64,7 @@ app.get("/api/img", requireAuth, imageRoute);
 // historique des mouvements, minimums.
 app.post("/api/stock/:id/ajuster", requireAuth, safe(adjustStock));
 app.post("/api/kits/ajouter", requireAuth, safe(addKits));
+app.post("/api/rapports/discord", requireAuth, safe(sendReportToDiscord));
 app.get("/api/mouvements", requireAuth, safe(listMovements));
 app.put("/api/minimum", requireAuth, safe(setMinimum));
 
