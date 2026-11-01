@@ -57,6 +57,8 @@ function groupSales(movements) {
   }
   for (const sale of sales.values()) {
     sale.total = sale.items.reduce((sum, m) => sum + m.change, 0);
+    // Anciennes ventes (note sans ce qui a été vendu) : on nomme les pièces.
+    if (!sale.sources.length) sale.sources = [...new Set(sale.items.map(pieceName))];
     // L'étui d'un kit vendu est la ligne « Kit (couleur) » : on l'appelle Étui et on le met en premier.
     for (const m of sale.items) m.label = m.variant && sale.sources.includes(pieceName(m)) ? `Étui ${m.variant.toLowerCase()}` : pieceName(m);
     sale.items.sort((a, b) => (b.label.startsWith("Étui ") ? 1 : 0) - (a.label.startsWith("Étui ") ? 1 : 0));
@@ -253,6 +255,9 @@ function SaleRows({ sale, expanded, onToggle, onOpen }) {
     <>
       <tr onClick={onOpen} className={`cursor-pointer hover:bg-gold/10! ${expanded ? "bg-gold/8" : "even:bg-[#1a120a]"}`}>
         <td className="td whitespace-nowrap text-[16px]! text-muted">
+          {sale.items.length === 1 ? (
+            <span className="inline-block w-6" />
+          ) : (
           <button
             type="button"
             aria-expanded={expanded}
@@ -265,6 +270,7 @@ function SaleRows({ sale, expanded, onToggle, onOpen }) {
           >
             {expanded ? "▾" : "▸"}
           </button>
+          )}
           {dateTime(sale.at)}
         </td>
         <td className="td">
@@ -272,9 +278,7 @@ function SaleRows({ sale, expanded, onToggle, onOpen }) {
         </td>
         <td className="td">
           <span className="text-parch">{sale.sources.join(", ")}</span>
-          <div className="sub mt-0.5">
-            {sale.items.length} {sale.items.length > 1 ? "lignes de stock" : "ligne de stock"}
-          </div>
+          {sale.items.length === 1 && sale.items[0].collection && <div className="sub mt-0.5">{sale.items[0].collection}</div>}
         </td>
         <td className="td num text-alert">{signed(sale.total)}</td>
         <td className="td num text-muted2" />
@@ -285,13 +289,14 @@ function SaleRows({ sale, expanded, onToggle, onOpen }) {
         <td className="td max-w-[260px] text-[15px]! text-muted2 italic">{sale.missing ? "Il manquait des pièces" : ""}</td>
       </tr>
       {expanded &&
+        sale.items.length > 1 &&
         sale.items.map((m) => (
           <tr key={m.id} className="bg-ink">
             <td className="td py-1.5!" />
             <td className="td py-1.5!" />
             <td className="td py-1.5! pl-9! text-[16px]! text-muted">{m.label}</td>
             <td className="td num py-1.5! text-[16px]! text-alert">{signed(m.change)}</td>
-            <td className="td num py-1.5! text-[16px]! text-muted2">{m.after}</td>
+            <td className="td py-1.5!" />
             <td className="td py-1.5! text-[14px]! text-faint italic" colSpan={3}>
               {m.note?.includes("manquait") ? m.note.split(" · ").find((part) => part.startsWith("manquait")) : ""}
             </td>
@@ -341,7 +346,6 @@ function SaleDetail({ sale, onClose }) {
               </Link>
               <span className="whitespace-nowrap">
                 <span className="text-[19px] text-alert">{signed(m.change)}</span>
-                <span className="ml-3 text-[15px] text-faint">reste {m.after}</span>
                 {missing && <span className="ml-3 text-[14px] text-alert-soft italic">{missing}</span>}
               </span>
             </div>
