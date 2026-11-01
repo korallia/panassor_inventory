@@ -19,6 +19,7 @@ import { loadAtelierData } from "./data.js";
 import { imageRoute } from "./images.js";
 import { adjustStock, addKits, listMovements } from "./stock.js";
 import { sendReportToDiscord } from "./discord.js";
+import { weeklyReport } from "./rapport.js";
 import { setMinimum } from "./minimums.js";
 
 const app = express();
@@ -65,6 +66,8 @@ app.get("/api/img", requireAuth, imageRoute);
 app.post("/api/stock/:id/ajuster", requireAuth, safe(adjustStock));
 app.post("/api/kits/ajouter", requireAuth, safe(addKits));
 app.post("/api/rapports/discord", requireAuth, safe(sendReportToDiscord));
+// Appelé par Vercel (crons, vercel.json) avec CRON_SECRET : pas de connexion.
+app.get("/api/cron/rapport", safe(weeklyReport));
 app.get("/api/mouvements", requireAuth, safe(listMovements));
 app.put("/api/minimum", requireAuth, safe(setMinimum));
 

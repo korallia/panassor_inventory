@@ -19,13 +19,10 @@ function chunks(text) {
   return parts;
 }
 
-export async function sendReportToDiscord(req, res) {
+/** Poste un texte dans le salon (coupé en morceaux si besoin). Lance une erreur si Discord refuse. */
+export async function postToDiscord(content) {
   const url = process.env.ATELIER_DISCORD_WEBHOOK_URL;
-  if (!url) return res.status(500).json({ error: "Webhook Discord manquant (ATELIER_DISCORD_WEBHOOK_URL)." });
-  const content = typeof req.body?.content === "string" ? req.body.content.trim() : "";
-  if (!content) return res.status(400).json({ error: "Rapport vide." });
-  if (content.length > 20000) return res.status(400).json({ error: "Rapport trop long." });
-
+  if (!url) throw Object.assign(new Error("Webhook Discord manquant (ATELIER_DISCORD_WEBHOOK_URL)."), { status: 500 });
   for (const part of chunks(content)) {
     const response = await fetch(url, {
       method: "POST",
@@ -35,8 +32,20 @@ export async function sendReportToDiscord(req, res) {
     });
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
-      return res.status(502).json({ error: `Discord a refusé le message (${response.status}). ${detail.slice(0, 200)}` });
+      throw Object.assign(new Error(`Discord a refusé le message (${response.status}). ${detail.slice(0, 200)}`), { status: 502 });
     }
+  }
+}
+
+/** Bouton « Envoyer sur Discord » : le texte vient de la page Alertes. */
+export async function sendReportToDiscord(req, res) {
+  const content = typeof req.body?.content === "string" ? req.body.content.trim() : "";
+  if (!content) return res.status(400).json({ error: "Rapport vide." });
+  if (content.length > 20000) return res.status(400).json({ error: "Rapport trop long." });
+  try {
+    await postToDiscord(content);
+  } catch (error) {
+    return res.status(error.status || 502).json({ error: error.message });
   }
   res.json({ ok: true });
 }
