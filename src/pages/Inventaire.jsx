@@ -7,6 +7,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useInventory } from "../store.jsx";
 import { ensembleState, kitsReady, productState, stockStatus } from "../lib/inventory.js";
 import { PageHeader, SampleNote, StatusPill, typeLabel, unitFor } from "../components/ui.jsx";
+import { AjouterKits } from "../components/AjouterKits.jsx";
 
 const STATUS_RANK = { out: 0, low: 1, ok: 2 };
 
@@ -81,6 +82,8 @@ function useRegister() {
 
 export default function Inventaire() {
   const { collections, rows, kitRows } = useRegister();
+  const { source } = useInventory();
+  const [addingKits, setAddingKits] = useState(false);
   const [collectionId, setCollectionId] = useState("all");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState("dispo");
@@ -128,14 +131,22 @@ export default function Inventaire() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader eyebrow="Registre" title="Inventaire">
-        <input
-          aria-label="Rechercher"
-          placeholder="Rechercher un produit…"
-          className="field w-[260px]!"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-        />
+        <div className="flex flex-wrap items-center gap-3">
+          <input
+            aria-label="Rechercher"
+            placeholder="Rechercher un produit…"
+            className="field w-[260px]!"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          {source === "live" && (
+            <button type="button" className="btn-primary" onClick={() => setAddingKits(true)}>
+              + Ajouter des kits
+            </button>
+          )}
+        </div>
       </PageHeader>
+      {addingKits && <AjouterKits onClose={() => setAddingKits(false)} />}
 
       <div className="flex flex-wrap items-end justify-between gap-x-6 border-b border-line">
         <div role="tablist" aria-label="Collection" className="flex overflow-x-auto">

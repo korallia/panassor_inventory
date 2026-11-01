@@ -17,7 +17,7 @@ import {
 } from "./auth.js";
 import { loadAtelierData } from "./data.js";
 import { imageRoute } from "./images.js";
-import { adjustStock, listMovements } from "./stock.js";
+import { adjustStock, addKits, listMovements } from "./stock.js";
 import { setMinimum } from "./minimums.js";
 
 const app = express();
@@ -62,6 +62,7 @@ app.get("/api/img", requireAuth, imageRoute);
 // Stock (connecté seulement) : ajouter ou retirer des pièces (avec raison et note),
 // historique des mouvements, minimums.
 app.post("/api/stock/:id/ajuster", requireAuth, safe(adjustStock));
+app.post("/api/kits/ajouter", requireAuth, safe(addKits));
 app.get("/api/mouvements", requireAuth, safe(listMovements));
 app.put("/api/minimum", requireAuth, safe(setMinimum));
 
