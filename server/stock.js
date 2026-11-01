@@ -41,7 +41,9 @@ export async function adjustStock(req, res) {
     await client.query("BEGIN");
     const updated = await client.query(
       `UPDATE stock SET quantity = quantity + $2, updated_at = now()
-       WHERE id = $1 AND quantity + $2 >= 0
+       -- Un retrait à la main ne descend jamais sous 0. Un ajout passe toujours,
+       -- même si une vente a rendu le stock négatif (migration 018 du site).
+       WHERE id = $1 AND ($2 > 0 OR quantity + $2 >= 0)
        RETURNING quantity`,
       [stockId, change]
     );
@@ -83,6 +85,8 @@ export async function listMovements(req, res) {
   };
 
   if (q.stock && Number.isInteger(Number(q.stock))) add("m.stock_id = ?", Number(q.stock));
+  // Une vente précise (lien « pièces manquantes » d'une fiche) : son id Square.
+  if (/^[A-Za-z0-9_-]{4,80}$/.test(q.vente || "")) add("m.note LIKE ?", `%(Square ${q.vente})%`);
   if (["fabrication", "perte", "correction", "vente"].includes(q.raison)) add("m.reason = ?::stock_reason", q.raison);
   if (q.personne === "square") where.push("m.atelier_user_id IS NULL");
   else if (q.personne) add("u.email = ?", String(q.personne).toLowerCase());

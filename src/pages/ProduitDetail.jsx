@@ -20,6 +20,7 @@ import {
   GaugeColumn,
   GaugePanel,
   LayerBar,
+  MissingPieces,
   RatioValue,
   RowGauge,
   Stepper,
@@ -75,6 +76,9 @@ function kitsNote(kitsUsing) {
 
 /** Sous-titre gris (classe .sub de index.css) et chiffre dans un sous-titre (.sub-num). */
 const smallText = "sub";
+// Un stock négatif s'écrit avec le vrai signe moins (−3).
+const signed = (value) => (value < 0 ? `−${Math.abs(value)}` : value);
+
 function Num({ children }) {
   return <span className="sub-num">{children}</span>;
 }
@@ -136,7 +140,7 @@ function PieceDetail({ product, collectionName }) {
           <GaugePanel legend={false}>
             {toReserve > 0 && <GaugeColumn label="Réservés" note={kitsNote(kitsUsing)} have={state.reserved} need={toReserve} />}
             <GaugeColumn label="Libres" note="minimum pour la vente" have={state.free} need={state.min} />
-            <GaugeColumn label="Total" note={total.note} have={state.stock} need={total.need} />
+            <GaugeColumn label="Total" note={total.note} have={state.stock} need={total.need} shown={product.stock} />
           </GaugePanel>
         }
       >
@@ -169,7 +173,8 @@ function PieceDetail({ product, collectionName }) {
               <RowGauge have={state.stock} need={total.need} />
             </div>
             <div>
-              <RatioValue have={state.stock} need={total.need} />
+              {/* Le vrai chiffre, même négatif (ventes non comblées). */}
+              <RatioValue have={product.stock} need={total.need} />
             </div>
           </div>
 
@@ -179,10 +184,11 @@ function PieceDetail({ product, collectionName }) {
             boxes={[
               { label: "Réservés", note: "pour les kits", value: state.reserved, stockId: product.stockId },
               { label: "Libres", note: "pour la vente", value: state.free, stockId: product.stockId },
-              { label: "Total", note: "en stock", value: state.stock, stockId: product.stockId },
+              { label: "Total", note: "en stock", value: signed(product.stock), stockId: product.stockId },
             ]}
           />
         </section>
+        <MissingPieces name={product.name} owed={product.owed || []} />
       </DetailLayout>
     </div>
   );
@@ -248,7 +254,7 @@ function PackDetail({ product, collectionName }) {
                 )}
               </div>
               <div className="order-last w-full min-w-0 sm:order-none sm:w-auto sm:flex-1">
-                <RowGauge have={type.stock} need={need} />
+                <RowGauge have={Math.max(0, type.stock)} need={need} />
               </div>
               <div className="ml-auto w-[100px]">
                 <RatioValue have={type.stock} need={need} />
@@ -264,12 +270,16 @@ function PackDetail({ product, collectionName }) {
             ...product.packTypes.map((type, index) => ({
               label: type.name,
               note: orphans[index].orphans > 0 ? `dont ${orphans[index].orphans} ${orphans[index].orphans === 1 ? "seule" : "seules"}` : "en stock",
-              value: type.stock,
+              value: signed(type.stock),
               stockId: type.stockId,
             })),
           ]}
         />
       </section>
+      <MissingPieces
+        name={product.name}
+        owed={product.packTypes.flatMap((type) => (type.owed || []).map((order) => ({ ...order, label: type.name.toLowerCase() })))}
+      />
       </DetailLayout>
       <SampleNote />
     </div>

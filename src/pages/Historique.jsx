@@ -2,7 +2,7 @@
 // Filtres : raison, personne, période, et recherche par pièce.
 // Les mouvements viennent de la table stock_movements (migration 017).
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { useInventory } from "../store.jsx";
 import { PageHeader } from "../components/ui.jsx";
@@ -71,6 +71,10 @@ const signed = (n) => `${n > 0 ? "+" : "−"}${Math.abs(n)}`;
 export default function Historique() {
   const { source, loadedAt, error } = useInventory();
   const [filters, setFilters] = useState({ raison: "", personne: "", du: "", au: "" });
+  // ?vente=<id Square> : arrivée depuis « Pièces manquantes » d'une fiche ; on
+  // montre seulement cette vente et on ouvre son détail.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const sale = searchParams.get("vente") || "";
   const [query, setQuery] = useState("");
   const [data, setData] = useState({ movements: [], people: [] });
   const personName = useMemo(
@@ -92,6 +96,7 @@ export default function Historique() {
     setStatus("chargement");
     const params = new URLSearchParams({ limite: "300" });
     for (const [key, value] of Object.entries(filters)) if (value) params.set(key, value);
+    if (sale) params.set("vente", sale);
     try {
       const response = await fetch(`/api/mouvements?${params}`);
       if (!response.ok) throw new Error();
@@ -100,7 +105,7 @@ export default function Historique() {
     } catch {
       setStatus("erreur");
     }
-  }, [filters]);
+  }, [filters, sale]);
 
   // Recharge quand les filtres changent, et après chaque ajustement (loadedAt change).
   useEffect(() => {
@@ -113,6 +118,14 @@ export default function Historique() {
     (m) => !needle || `${m.product} ${m.variant || ""} ${m.collection || ""}`.toLowerCase().includes(needle)
   );
   const lines = groupSales(rows);
+
+  // Arrivée par un lien de vente : ouvrir sa fenêtre une fois les données là.
+  useEffect(() => {
+    if (!sale || status !== "pret") return;
+    const found = lines.find((line) => line.kind === "sale" && line.ref === sale);
+    if (found) setOpenSale(found);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sale, status, data]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -162,13 +175,14 @@ export default function Historique() {
             <Filter label="Au">
               <input type="date" className="field w-[170px]!" value={filters.au} onChange={set("au")} />
             </Filter>
-            {(filters.raison || filters.personne || filters.du || filters.au || query) && (
+            {(filters.raison || filters.personne || filters.du || filters.au || query || sale) && (
               <button
                 type="button"
                 className="btn-ghost"
                 onClick={() => {
                   setFilters({ raison: "", personne: "", du: "", au: "" });
                   setQuery("");
+                  setSearchParams({});
                 }}
               >
                 Effacer

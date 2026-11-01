@@ -42,7 +42,7 @@ function readAtelierConfig() {
 
 export async function loadAtelierData() {
   const atelierConfig = readAtelierConfig();
-  const [collectionsRes, productsRes, imagesRes, variantsRes, componentsRes, stockRes, minimumsRes] = await Promise.all([
+  const [collectionsRes, productsRes, imagesRes, variantsRes, componentsRes, stockRes, minimumsRes, owedRes] = await Promise.all([
     readOnly(`SELECT id, name_fr, status FROM collections ORDER BY name_fr`),
     readOnly(`
       SELECT id, collection_id, slug_fr, name_fr, name_en, title_fr, title_en,
@@ -64,6 +64,13 @@ export async function loadAtelierData() {
     readOnly(`SELECT id, product_id, variant_id, quantity FROM stock`),
     // Minimums (migration 017) : par produit, ou par variante (étui d'une couleur).
     readOnly(`SELECT product_id, variant_id, minimum FROM minimums`),
+    // Ventes non comblées : ventes qui ont rendu une ligne de stock négative
+    // (migration 018 du site). Les plus récentes d'abord.
+    readOnly(`
+      SELECT m.stock_id, m.note
+      FROM stock_movements m JOIN stock s ON s.id = m.stock_id
+      WHERE s.quantity < 0 AND m.reason = 'vente' AND m.note LIKE '%manquait%'
+      ORDER BY m.created_at DESC, m.id DESC`),
   ]);
 
   const variantsByProduct = {};
@@ -84,8 +91,30 @@ export async function loadAtelierData() {
     else minByVariant[row.variant_id] = row.minimum;
   }
 
+  // Pièces manquantes par ligne de stock : un stock à −3 = 3 pièces dues. On les
+  // attribue aux ventes « manquait N », des plus récentes aux plus anciennes
+  // (une fabrication comble d'abord les plus anciennes).
+  const quantityByStock = Object.fromEntries(stockRes.rows.map((row) => [row.id, row.quantity]));
+  const owedByStock = {};
+  for (const m of owedRes.rows) {
+    const left = -(quantityByStock[m.stock_id] ?? 0) - (owedByStock[m.stock_id] || []).reduce((n, o) => n + o.qty, 0);
+    const missing = Number(m.note.match(/manquait (\d+)/)?.[1] || 0);
+    const ref = m.note.match(/\(Square ([^)]+)\)/)?.[1];
+    if (left <= 0 || !missing || !ref) continue;
+    (owedByStock[m.stock_id] ||= []).push({
+      ref,
+      orderNumber: m.note.match(/Commande #(\d+)/)?.[1] || null,
+      qty: Math.min(missing, left),
+    });
+  }
+
   // Une ligne de stock vue par l'atelier : son id sert aux boutons « Ajuster ».
-  const line = (row) => ({ stockId: row ? String(row.id) : null, stock: row?.quantity ?? 0 });
+  // stock peut être négatif (ventes non comblées) ; owed = les commandes à combler.
+  const line = (row) => ({
+    stockId: row ? String(row.id) : null,
+    stock: row?.quantity ?? 0,
+    owed: row ? owedByStock[row.id] || [] : [],
+  });
 
   const id = (value) => String(value);
   const kitsRows = productsRes.rows.filter((p) => p.is_kit);
