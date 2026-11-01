@@ -71,8 +71,7 @@ const signed = (n) => `${n > 0 ? "+" : "−"}${Math.abs(n)}`;
 export default function Historique() {
   const { source, loadedAt, error } = useInventory();
   const [filters, setFilters] = useState({ raison: "", personne: "", du: "", au: "" });
-  // ?vente=<id Square> : arrivée depuis « Pièces manquantes » d'une fiche ; on
-  // montre seulement cette vente et on ouvre son détail.
+  // ?vente=<id Square> : arrivée depuis « Pièces manquantes » d'une fiche.
   const [searchParams, setSearchParams] = useSearchParams();
   const sale = searchParams.get("vente") || "";
   const [query, setQuery] = useState("");
@@ -96,7 +95,6 @@ export default function Historique() {
     setStatus("chargement");
     const params = new URLSearchParams({ limite: "300" });
     for (const [key, value] of Object.entries(filters)) if (value) params.set(key, value);
-    if (sale) params.set("vente", sale);
     try {
       const response = await fetch(`/api/mouvements?${params}`);
       if (!response.ok) throw new Error();
@@ -105,7 +103,7 @@ export default function Historique() {
     } catch {
       setStatus("erreur");
     }
-  }, [filters, sale]);
+  }, [filters]);
 
   // Recharge quand les filtres changent, et après chaque ajustement (loadedAt change).
   useEffect(() => {
@@ -119,11 +117,23 @@ export default function Historique() {
   );
   const lines = groupSales(rows);
 
-  // Arrivée par un lien de vente : ouvrir sa fenêtre une fois les données là.
+  // Arrivée par un lien de vente (« Pièces manquantes » d'une fiche) : on
+  // garde tout l'historique, on ouvre seulement la fenêtre de cette vente,
+  // puis on retire ?vente= de l'adresse (un rafraîchissement montre tout).
   useEffect(() => {
     if (!sale || status !== "pret") return;
-    const found = lines.find((line) => line.kind === "sale" && line.ref === sale);
-    if (found) setOpenSale(found);
+    const openFound = (list) => {
+      const found = groupSales(list).find((line) => line.kind === "sale" && line.ref === sale);
+      if (found) setOpenSale(found);
+      setSearchParams({}, { replace: true });
+    };
+    const inPage = data.movements.some((m) => m.note?.includes(`(Square ${sale})`));
+    if (inPage) return openFound(data.movements);
+    // Vente plus ancienne que les 300 derniers mouvements : on va la chercher seule.
+    fetch(`/api/mouvements?vente=${encodeURIComponent(sale)}&limite=100`)
+      .then((response) => (response.ok ? response.json() : { movements: [] }))
+      .then((result) => openFound(result.movements))
+      .catch(() => setSearchParams({}, { replace: true }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sale, status, data]);
 
@@ -175,14 +185,13 @@ export default function Historique() {
             <Filter label="Au">
               <input type="date" className="field w-[170px]!" value={filters.au} onChange={set("au")} />
             </Filter>
-            {(filters.raison || filters.personne || filters.du || filters.au || query || sale) && (
+            {(filters.raison || filters.personne || filters.du || filters.au || query) && (
               <button
                 type="button"
                 className="btn-ghost"
                 onClick={() => {
                   setFilters({ raison: "", personne: "", du: "", au: "" });
                   setQuery("");
-                  setSearchParams({});
                 }}
               >
                 Effacer
