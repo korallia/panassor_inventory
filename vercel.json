@@ -25,5 +25,15 @@
         }
       ]
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/rapport",
+      "schedule": "0 23 * * 1"
+    },
+    {
+      "path": "/api/cron/rapport",
+      "schedule": "0 0 * * 2"
+    }
   ]
 }
